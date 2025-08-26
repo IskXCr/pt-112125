@@ -50,6 +50,8 @@ class ModelParams(ParamGroup):
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
+        self.masks = "masks"
+        self.inverse_mask = False
         self._resolution = -1
         self._white_background = False
         self.data_device = "cuda"
@@ -85,8 +87,8 @@ class OptimizationParams(ParamGroup):
         self.lambda_dssim = 0.2
         self.lambda_dist = 0.0
         self.lambda_normal = 0.05
+        self.lambda_mask = 1.0
         self.opacity_cull = 0.05
-
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500

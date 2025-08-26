@@ -67,11 +67,23 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         viewpoint_cam = viewpoint_stack.pop(randint(0, len(viewpoint_stack)-1))
         
         render_pkg = render(viewpoint_cam, gaussians, pipe, background)
-        image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
+        image, viewspace_point_tensor, visibility_filter, radii, rend_alpha = (
+            render_pkg["render"],
+            render_pkg["viewspace_points"],
+            render_pkg["visibility_filter"],
+            render_pkg["radii"],
+            render_pkg["rend_alpha"]
+        )
         
+        raw_mask_loss = 0
+        
+        if viewpoint_cam.gt_alpha_mask is not None:
+            alpha_mask = viewpoint_cam.gt_alpha_mask
+            raw_mask_loss = (rend_alpha - alpha_mask).abs().mean()
+
         gt_image = viewpoint_cam.original_image.cuda()
         Ll1 = l1_loss(image, gt_image)
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + opt.lambda_mask * raw_mask_loss
         
         # regularization
         lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
@@ -270,6 +282,8 @@ if __name__ == "__main__":
 
     # Initialize system state (RNG)
     safe_state(args.quiet)
+
+    print(f"Mask=\"{args.masks}\", inverse_mask=\"{args.inverse_mask}\"")
 
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
