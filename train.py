@@ -74,30 +74,34 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             render_pkg["radii"],
             render_pkg["rend_alpha"]
         )
-        
+
+        gt_image = viewpoint_cam.original_image.cuda()
+
         raw_mask_loss = 0
         
         if viewpoint_cam.gt_alpha_mask is not None:
-            alpha_mask = viewpoint_cam.gt_alpha_mask
+            alpha_mask = viewpoint_cam.gt_alpha_mask.cuda()
+            bool_alpha_mask = alpha_mask > 0
             raw_mask_loss = (rend_alpha - alpha_mask).abs().mean()
 
-        gt_image = viewpoint_cam.original_image.cuda()
+            image = image * alpha_mask
+            gt_image = gt_image * alpha_mask
+            rend_dist = render_pkg["rend_dist"] * alpha_mask[0]
+            rend_normal  = render_pkg['rend_normal'] * alpha_mask
+            surf_normal = render_pkg['surf_normal'] * alpha_mask
+
         Ll1 = l1_loss(image, gt_image)
-        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image)) + opt.lambda_mask * raw_mask_loss
-        
+        loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
+    
         # regularization
         lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
         lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0
 
-        rend_dist = render_pkg["rend_dist"]
-        rend_normal  = render_pkg['rend_normal']
-        surf_normal = render_pkg['surf_normal']
-        normal_error = (1 - (rend_normal * surf_normal).sum(dim=0))[None]
+        normal_error = (1 - (rend_normal * surf_normal).sum(dim=0))[None][bool_alpha_mask[0:1]]
         normal_loss = lambda_normal * (normal_error).mean()
-        dist_loss = lambda_dist * (rend_dist).mean()
-
-        # loss
-        total_loss = loss + dist_loss + normal_loss
+        dist_loss = lambda_dist * (rend_dist[bool_alpha_mask[0:1]]).mean()
+        
+        total_loss = loss + dist_loss + normal_loss + opt.lambda_mask * raw_mask_loss
         
         total_loss.backward()
 

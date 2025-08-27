@@ -59,3 +59,10 @@ def render_net_image(render_pkg, render_items, render_mode, camera):
     if net_image.shape[0]==1:
         net_image = colormap(net_image)
     return net_image
+
+def dilate_mask(mask, r = 2):
+    assert mask.dtype == torch.bool
+    ys, xs = torch.meshgrid(torch.arange(-r, r+1, device=mask.device), torch.arange(-r, r+1, device=mask.device), indexing="ij")
+    kernel = ((xs * xs + ys * ys) <= r * r).float()[None, None]
+    m = mask[None, None].float()
+    return (F.conv2d(m, kernel, padding=r) > 0)[0, 0]

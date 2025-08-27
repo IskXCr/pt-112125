@@ -15,7 +15,7 @@ import numpy as np
 from utils.graphics_utils import getWorld2View2, getProjectionMatrix
 
 class Camera(nn.Module):
-    def __init__(self, colmap_id, R, T, FoVx, FoVy, image, gt_alpha_mask,
+    def __init__(self, colmap_id, R, T, FoVx, FoVy, image, alpha_mask,
                  image_name, uid,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda"
                  ):
@@ -40,9 +40,10 @@ class Camera(nn.Module):
         self.image_width = self.original_image.shape[2]
         self.image_height = self.original_image.shape[1]
 
-        if gt_alpha_mask is not None:
-            gt_alpha_mask = torch.tensor(gt_alpha_mask).to(dtype=torch.float).to(self.data_device)
-            self.gt_alpha_mask = gt_alpha_mask.reshape(-1, self.image_height, self.image_width)
+        if alpha_mask is not None:
+            alpha_mask = alpha_mask.to(dtype=torch.float)
+
+            self.gt_alpha_mask = alpha_mask.reshape(-1, self.image_height, self.image_width)
             # self.original_image *= gt_alpha_mask.to(self.data_device)
         else:
             # self.original_image *= torch.ones((1, self.image_height, self.image_width), device=self.data_device) # do we need this?

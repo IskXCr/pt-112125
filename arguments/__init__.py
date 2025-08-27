@@ -52,6 +52,7 @@ class ModelParams(ParamGroup):
         self._images = "images"
         self.masks = "masks"
         self.inverse_mask = False
+        self.dilate_mask = True
         self._resolution = -1
         self._white_background = False
         self.data_device = "cuda"

@@ -11,9 +11,12 @@
 
 from scene.cameras import Camera
 import numpy as np
+import torch
+import torchvision
 import cv2
 from utils.general_utils import PILtoTorch
 from utils.graphics_utils import fov2focal
+from utils.image_utils import dilate_mask
 
 WARNED = False
 
@@ -41,16 +44,19 @@ def loadCam(args, id, cam_info, resolution_scale):
 
     resized_image_rgb = PILtoTorch(cam_info.image, resolution)
     if cam_info.mask_path != "":
-        alpha_mask = cv2.imread(cam_info.mask_path, 0) > 0
+        alpha_mask = torch.from_numpy(cv2.imread(cam_info.mask_path, 0) > 0)
         if args.inverse_mask:
             alpha_mask = ~alpha_mask
+        if args.dilate_mask:
+            alpha_mask = dilate_mask(alpha_mask, r=1)[None].expand(3, -1, -1)
+        alpha_mask = torchvision.transforms.functional.resize(alpha_mask, size=(resolution[1], resolution[0]), antialias=True)
     else:
         alpha_mask = None
     gt_image = resized_image_rgb
 
     return Camera(colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, 
-                  image=gt_image, gt_alpha_mask=alpha_mask,
+                  image=gt_image, alpha_mask=alpha_mask,
                   image_name=cam_info.image_name, uid=id, data_device=args.data_device)
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args):
