@@ -11,6 +11,7 @@
 
 import os
 import torch
+import math
 from random import randint
 from utils.loss_utils import l1_loss, ssim
 from gaussian_renderer import render, network_gui
@@ -76,19 +77,20 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         )
 
         gt_image = viewpoint_cam.original_image.cuda()
+        rend_normal = render_pkg['rend_normal']
+        surf_normal = render_pkg['surf_normal']
+        rend_dist = render_pkg["rend_dist"]
 
         raw_mask_loss = 0
         
         if viewpoint_cam.gt_alpha_mask is not None:
-            alpha_mask = viewpoint_cam.gt_alpha_mask.cuda()
-            bool_alpha_mask = alpha_mask > 0
+            alpha_mask = viewpoint_cam.gt_alpha_mask.cuda().expand(3, -1, -1)
             raw_mask_loss = (rend_alpha - alpha_mask).abs().mean()
-
             image = image * alpha_mask
             gt_image = gt_image * alpha_mask
-            rend_dist = render_pkg["rend_dist"] * alpha_mask[0]
-            rend_normal  = render_pkg['rend_normal'] * alpha_mask
-            surf_normal = render_pkg['surf_normal'] * alpha_mask
+            rend_normal = torch.full_like(rend_normal, fill_value=math.sqrt(1/3)) * (1.0 - alpha_mask) + rend_normal * alpha_mask
+            surf_normal = torch.full_like(surf_normal, fill_value=math.sqrt(1/3)) * (1.0 - alpha_mask) + surf_normal * alpha_mask
+            rend_dist = rend_dist * alpha_mask[0]
 
         Ll1 = l1_loss(image, gt_image)
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim(image, gt_image))
@@ -97,9 +99,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
         lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0
 
-        normal_error = (1 - (rend_normal * surf_normal).sum(dim=0))[None][bool_alpha_mask[0:1]]
+        normal_error = (1 - (rend_normal * surf_normal).sum(dim=0))[None]
         normal_loss = lambda_normal * (normal_error).mean()
-        dist_loss = lambda_dist * (rend_dist[bool_alpha_mask[0:1]]).mean()
+        dist_loss = lambda_dist * (rend_dist).mean()
         
         total_loss = loss + dist_loss + normal_loss + opt.lambda_mask * raw_mask_loss
         
@@ -287,7 +289,7 @@ if __name__ == "__main__":
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    print(f"Mask=\"{args.masks}\", inverse_mask=\"{args.inverse_mask}\"")
+    print(f"Mask=\"{args.masks}\", inverse_mask=\"{args.inverse_mask}\", dilate_mask=\"{args.dilate_mask}\", dilation_radius=\"{args.dilation_radius}\"")
 
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)

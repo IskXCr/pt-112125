@@ -41,9 +41,10 @@ class Camera(nn.Module):
         self.image_height = self.original_image.shape[1]
 
         if alpha_mask is not None:
-            alpha_mask = alpha_mask.to(dtype=torch.float)
+            alpha_mask = alpha_mask.to(dtype=torch.float, device=self.data_device)[0:1]
 
-            self.gt_alpha_mask = alpha_mask.reshape(-1, self.image_height, self.image_width)
+            alpha_mask = alpha_mask.reshape(-1, self.image_height, self.image_width)
+            self.gt_alpha_mask = alpha_mask.cpu().pin_memory()
             # self.original_image *= gt_alpha_mask.to(self.data_device)
         else:
             # self.original_image *= torch.ones((1, self.image_height, self.image_width), device=self.data_device) # do we need this?

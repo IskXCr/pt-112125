@@ -44,12 +44,14 @@ def loadCam(args, id, cam_info, resolution_scale):
 
     resized_image_rgb = PILtoTorch(cam_info.image, resolution)
     if cam_info.mask_path != "":
-        alpha_mask = torch.from_numpy(cv2.imread(cam_info.mask_path, 0) > 0)
+        alpha_mask = torch.from_numpy(cv2.imread(cam_info.mask_path, 0) > 0).cuda()[None]
+        assert alpha_mask.ndim == 3
+        if args.dilate_mask:
+            alpha_mask = dilate_mask(alpha_mask[0], args.dilation_radius)[None]
+            alpha_mask = alpha_mask.expand(3, -1, -1)
         if args.inverse_mask:
             alpha_mask = ~alpha_mask
-        if args.dilate_mask:
-            alpha_mask = dilate_mask(alpha_mask, r=1)[None].expand(3, -1, -1)
-        alpha_mask = torchvision.transforms.functional.resize(alpha_mask, size=(resolution[1], resolution[0]), antialias=True)
+        alpha_mask = alpha_mask.cpu()
     else:
         alpha_mask = None
     gt_image = resized_image_rgb
