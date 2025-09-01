@@ -50,7 +50,6 @@ class ModelParams(ParamGroup):
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
-        self.masks = "masks"
         self.inverse_mask = False
         self.dilate_mask = True
         self.dilation_radius = 0

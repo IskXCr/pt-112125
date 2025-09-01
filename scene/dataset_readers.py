@@ -66,7 +66,7 @@ def getNerfppNorm(cam_info):
 
     return {"translate": translate, "radius": radius}
 
-def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, masks_folder):
+def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
     cam_infos = []
     for idx, key in enumerate(cam_extrinsics):
         sys.stdout.write('\r')
@@ -94,10 +94,11 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder, masks_folde
             FovX = focal2fov(focal_length_x, width)
         else:
             assert False, "Colmap camera model not handled: only undistorted datasets (PINHOLE or SIMPLE_PINHOLE cameras) supported!"
-
-        image_path = os.path.join(images_folder, os.path.basename(extr.name))
-        image_name = os.path.basename(image_path).split(".")[0]
-        mask_path = os.path.join(masks_folder, extr.name) if masks_folder != "" else ""
+        basename = os.path.basename(extr.name)
+        base, ext = os.path.splitext(basename)
+        image_path = os.path.join(images_folder, basename)
+        image_name = base
+        mask_path = os.path.join(images_folder, base + "_mask" + ext)
         image = Image.open(image_path)
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
@@ -184,7 +185,7 @@ def readColmapSceneInfo(path, images, masks, eval, llffhold=8):
                            ply_path=ply_path)
     return scene_info
 
-def readCamerasFromTransforms(path, transformsfile, white_background, masks_folder, extension=".png"):
+def readCamerasFromTransforms(path, transformsfile, white_background, extension=".png"):
     cam_infos = []
 
     with open(os.path.join(path, transformsfile)) as json_file:
@@ -194,6 +195,7 @@ def readCamerasFromTransforms(path, transformsfile, white_background, masks_fold
         frames = contents["frames"]
         for idx, frame in enumerate(frames):
             cam_name = os.path.join(path, frame["file_path"] + extension)
+            mask_path = os.path.join(path, frame["file_path"] + "_mask" + extension)
 
             # NeRF 'transform_matrix' is a camera-to-world transform
             c2w = np.array(frame["transform_matrix"])
@@ -221,21 +223,18 @@ def readCamerasFromTransforms(path, transformsfile, white_background, masks_fold
             FovY = fovy 
             FovX = fovx
 
-            mask_path = os.path.join(masks_folder, f"{image_name}.png") if masks_folder != "" else ""
-
             cam_infos.append(CameraInfo(uid=idx, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
                             image_path=image_path, image_name=image_name, mask_path=mask_path,
                             width=image.size[0], height=image.size[1]))
             
     return cam_infos
 
-def readNerfSyntheticInfo(path, white_background, masks, eval, extension=".png"):
+def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
     print("Reading Training Transforms")
     train_cam_infos = readCamerasFromTransforms(
         path,
         "transforms_train.json",
         white_background,
-        os.path.join(path, masks),
         extension
     )
     print("Reading Test Transforms")
@@ -243,7 +242,6 @@ def readNerfSyntheticInfo(path, white_background, masks, eval, extension=".png")
         path,
         "transforms_test.json",
         white_background,
-        os.path.join(path, masks),
         extension
     )
     

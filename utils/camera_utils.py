@@ -19,6 +19,7 @@ from utils.graphics_utils import fov2focal
 from utils.image_utils import dilate_mask
 
 WARNED = False
+MASK_READ = False
 
 def loadCam(args, id, cam_info, resolution_scale):
     orig_w, orig_h = cam_info.image.size
@@ -44,6 +45,11 @@ def loadCam(args, id, cam_info, resolution_scale):
 
     resized_image_rgb = PILtoTorch(cam_info.image, resolution)
     if cam_info.mask_path != "":
+        global MASK_READ
+        if not MASK_READ:
+            print("[ INFO ] Dataset has provided at least one non-empty mask. You would see this info only once.")
+            print(f"[ INFO ] Path of the target mask: {cam_info.mask_path}")
+            MASK_READ = True
         alpha_mask = torch.from_numpy(cv2.imread(cam_info.mask_path, 0) > 0).cuda()[None]
         assert alpha_mask.ndim == 3
         if args.dilate_mask:
