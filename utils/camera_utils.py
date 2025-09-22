@@ -55,7 +55,7 @@ def loadCam(args, id, cam_info, resolution_scale):
         if args.dilate_mask:
             alpha_mask = dilate_mask(alpha_mask[0], args.dilation_radius)[None]
             alpha_mask = alpha_mask.expand(3, -1, -1)
-        if args.inverse_mask:
+        if args.invert_mask:
             alpha_mask = ~alpha_mask
         alpha_mask = alpha_mask.cpu()
     else:

@@ -289,7 +289,7 @@ if __name__ == "__main__":
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    print(f"inverse_mask=\"{args.inverse_mask}\", dilate_mask=\"{args.dilate_mask}\", dilation_radius=\"{args.dilation_radius}\"")
+    print(f"invert_mask=\"{args.invert_mask}\", dilate_mask=\"{args.dilate_mask}\", dilation_radius=\"{args.dilation_radius}\"")
 
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)
