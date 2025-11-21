@@ -1,6 +1,6 @@
 [submodule "submodules/diff-surfel-rasterization"]
 	path = submodules/diff-surfel-rasterization
-	url = https://github.com/hbb1/diff-surfel-rasterization.git
+	url = https://github.com/IskXCr/pt-112125-sub-1.git
 [submodule "submodules/simple-knn"]
 	path = submodules/simple-knn
 	url = https://gitlab.inria.fr/bkerbl/simple-knn.git
