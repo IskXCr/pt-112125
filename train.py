@@ -13,7 +13,12 @@ import os
 import torch
 import math
 from random import randint
-from utils.loss_utils import l1_loss, ssim
+from utils.loss_utils import (
+    l1_loss,
+    ssim,
+    compute_gradient_smoothness,
+    compute_laplacian_smoothness
+)
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -98,12 +103,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # regularization
         lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
         lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0
+        lambda_normal_grad = opt.lambda_normal_grad if iteration > 3000 else 0.0
 
         normal_error = (1 - (rend_normal * surf_normal).sum(dim=0))[None]
         normal_loss = lambda_normal * (normal_error).mean()
         dist_loss = lambda_dist * (rend_dist).mean()
+        smooth_loss = lambda_normal_grad * compute_gradient_smoothness(rend_normal[None, ...])
         
-        total_loss = loss + dist_loss + normal_loss + opt.lambda_mask * raw_mask_loss
+        total_loss = loss + dist_loss + normal_loss + smooth_loss + opt.lambda_mask * raw_mask_loss
         
         total_loss.backward()
 

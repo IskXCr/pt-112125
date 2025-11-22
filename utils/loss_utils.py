@@ -72,3 +72,23 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
     else:
         return ssim_map.mean(1).mean(1).mean(1)
 
+def compute_gradient_smoothness(image: torch.Tensor):
+    """
+    image: [B, C, H, W] - The rendered channels
+    """
+    n_grad_x = image[:, :, :, 1:] - image[:, :, :, :-1]
+    # derivative in y
+    n_grad_y = image[:, :, 1:, :] - image[:, :, :-1, :]
+
+    loss = n_grad_x.abs().mean() + n_grad_y.abs().mean()
+    return loss
+
+def compute_laplacian_smoothness(image: torch.Tensor):
+    B, C, H, W = image.shape
+    kernel = torch.tensor([[0., 1., 0.],
+                           [1., -4., 1.],
+                           [0., 1., 0.]], device=image.device).view(1, 1, 3, 3)
+    kernel = kernel.repeat(C, 1, 1, 1)
+
+    lap = F.conv2d(image, kernel, padding=1, groups=C)
+    return lap.abs().mean()
