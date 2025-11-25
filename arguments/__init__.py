@@ -88,14 +88,16 @@ class OptimizationParams(ParamGroup):
         self.lambda_dssim = 0.2
         self.lambda_dist = 0.0
         self.lambda_normal = 0.05
-        self.lambda_normal_grad = 0.03
+        self.lambda_normal_grad = 0.1
+        self.lambda_avg_scale = 0.3
         self.lambda_mask = 1.0
-        self.opacity_cull = 0.05
+        self.opacity_cull = 0.3
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
+        self.opacity_prune_cooldown = 2500
         self.densify_from_iter = 500
         self.densify_until_iter = 15_000
-        self.densify_grad_threshold = 0.0002
+        self.densify_grad_threshold = 0.00003
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):

@@ -55,6 +55,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     ema_dist_for_log = 0.0
     ema_normal_for_log = 0.0
 
+    last_opacity_reset_iter = 0
+
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
     for iteration in range(first_iter, opt.iterations + 1):        
@@ -104,13 +106,15 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
         lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0
         lambda_normal_grad = opt.lambda_normal_grad if iteration > 3000 else 0.0
+        lambda_avg_scale = opt.lambda_avg_scale if iteration > 3000 else 0.0
 
         normal_error = (1 - (rend_normal * surf_normal).sum(dim=0))[None]
         normal_loss = lambda_normal * (normal_error).mean()
         dist_loss = lambda_dist * (rend_dist).mean()
         smooth_loss = lambda_normal_grad * compute_gradient_smoothness(rend_normal[None, ...])
+        scale_loss = lambda_avg_scale * gaussians.get_scaling.abs().mean(dim=-1).std()
         
-        total_loss = loss + dist_loss + normal_loss + smooth_loss + opt.lambda_mask * raw_mask_loss
+        total_loss = loss + dist_loss + normal_loss + smooth_loss + scale_loss + opt.lambda_mask * raw_mask_loss
         
         total_loss.backward()
 
@@ -154,10 +158,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
                     size_threshold = 20 if iteration > opt.opacity_reset_interval else None
-                    gaussians.densify_and_prune(opt.densify_grad_threshold, opt.opacity_cull, scene.cameras_extent, size_threshold)
+                    opacity_cull = opt.opacity_cull if iteration > last_opacity_reset_iter + opt.opacity_prune_cooldown else None
+                    gaussians.densify_and_prune(opt.densify_grad_threshold, opacity_cull, scene.cameras_extent, size_threshold)
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
+                    last_opacity_reset_iter = iteration
 
             # Optimizer step
             if iteration < opt.iterations:
