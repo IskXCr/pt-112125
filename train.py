@@ -107,14 +107,16 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0
         lambda_normal_grad = opt.lambda_normal_grad if iteration > 3000 else 0.0
         lambda_avg_scale = opt.lambda_avg_scale if iteration > 3000 else 0.0
+        lambda_transparency_penalty = opt.lambda_transparency_penalty if iteration > 3000 else 0.0
 
         normal_error = (1 - (rend_normal * surf_normal).sum(dim=0))[None]
         normal_loss = lambda_normal * (normal_error).mean()
         dist_loss = lambda_dist * (rend_dist).mean()
         smooth_loss = lambda_normal_grad * compute_gradient_smoothness(rend_normal[None, ...])
         scale_loss = lambda_avg_scale * gaussians.get_scaling.abs().mean(dim=-1).std()
+        transparency_loss = lambda_transparency_penalty * (1.0 - gaussians.get_opacity[visibility_filter]).mean()
         
-        total_loss = loss + dist_loss + normal_loss + smooth_loss + scale_loss + opt.lambda_mask * raw_mask_loss
+        total_loss = loss + dist_loss + normal_loss + smooth_loss + scale_loss + transparency_loss + opt.lambda_mask * raw_mask_loss
         
         total_loss.backward()
 
