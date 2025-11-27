@@ -91,7 +91,7 @@ class OptimizationParams(ParamGroup):
         self.lambda_normal_grad = 0.1
         self.lambda_avg_scale = 0.3
         self.lambda_mask = 1.0
-        self.opacity_cull = 0.3
+        self.opacity_cull = 0.5
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.opacity_prune_cooldown = 2500
