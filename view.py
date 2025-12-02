@@ -11,13 +11,15 @@ def view(dataset, pipe, iteration):
     scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
-
+    print("Initialization completed")
     while True:
+        print("Waiting for connection...", end="\r")
         with torch.no_grad():
             if network_gui.conn == None:
                 network_gui.try_connect(dataset.render_items)
             while network_gui.conn != None:
                 try:
+                    print("\nConnected.")
                     net_image_bytes = None
                     custom_cam, do_training, keep_alive, scaling_modifer, render_mode = network_gui.receive()
                     if custom_cam != None:
