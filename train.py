@@ -51,6 +51,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     iter_end = torch.cuda.Event(enable_timing = True)
 
     viewpoint_stack = None
+    ema_total_for_log = 0.0
     ema_loss_for_log = 0.0
     ema_dist_for_log = 0.0
     ema_normal_for_log = 0.0
@@ -117,7 +118,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         avg_scale_loss = lambda_avg_scale * scales.mean(dim=-1).std()
         max_scale_loss = lambda_max_scale * scales.max(dim=-1)[0].mean()
         
-        total_loss = loss + dist_loss + normal_loss + smooth_loss + avg_scale_loss + max_scale_loss + opt.lambda_mask * raw_mask_loss
+        total_loss = loss * opt.lambda_rgb + dist_loss + normal_loss + smooth_loss + avg_scale_loss + max_scale_loss + opt.lambda_mask * raw_mask_loss
         
         total_loss.backward()
 
@@ -125,6 +126,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         with torch.no_grad():
             # Progress bar
+            ema_total_for_log = 0.4 * total_loss.item() + 0.6 * ema_total_for_log
             ema_loss_for_log = 0.4 * loss.item() + 0.6 * ema_loss_for_log
             ema_dist_for_log = 0.4 * dist_loss.item() + 0.6 * ema_dist_for_log
             ema_normal_for_log = 0.4 * normal_loss.item() + 0.6 * ema_normal_for_log
@@ -145,6 +147,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
             # Log and save
             if tb_writer is not None:
+                tb_writer.add_scalar('train_loss_patches/total_loss', ema_total_for_log, iteration)
                 tb_writer.add_scalar('train_loss_patches/dist_loss', ema_dist_for_log, iteration)
                 tb_writer.add_scalar('train_loss_patches/normal_loss', ema_normal_for_log, iteration)
 
