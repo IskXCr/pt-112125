@@ -36,7 +36,7 @@ class Camera(nn.Module):
             print(f"[Warning] Custom device {data_device} failed, fallback to default cuda device" )
             self.data_device = torch.device("cuda")
 
-        self.original_image = image.clamp(0.0, 1.0) # move to device at dataloader to reduce VRAM requirement
+        self.original_image = image.clamp(0.0, 1.0).cuda() # move to device at dataloader
         self.image_width = self.original_image.shape[2]
         self.image_height = self.original_image.shape[1]
 
@@ -44,7 +44,7 @@ class Camera(nn.Module):
             alpha_mask = alpha_mask.to(dtype=torch.float, device=self.data_device)[0:1]
 
             alpha_mask = alpha_mask.reshape(-1, self.image_height, self.image_width)
-            self.gt_alpha_mask = alpha_mask.cpu().pin_memory()
+            self.gt_alpha_mask = alpha_mask.cuda()
             # self.original_image *= gt_alpha_mask.to(self.data_device)
         else:
             # self.original_image *= torch.ones((1, self.image_height, self.image_width), device=self.data_device) # do we need this?
