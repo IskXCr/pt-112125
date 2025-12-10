@@ -88,7 +88,7 @@ class OptimizationParams(ParamGroup):
         self.lambda_dssim = 0.2
         self.lambda_dist = 5000
         self.lambda_normal = 0.05
-        self.lambda_normal_grad = 0.1
+        self.lambda_normal_grad = 1
         self.lambda_avg_scale = 0.3
         self.lambda_max_scale = 1.0
         self.lambda_mask = 1.8

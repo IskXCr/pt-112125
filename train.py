@@ -106,7 +106,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         # regularization
         lambda_normal = opt.lambda_normal if iteration > 7000 else 0.0
         lambda_dist = opt.lambda_dist if iteration > 3000 else 0.0
-        lambda_normal_grad = opt.lambda_normal_grad if iteration > 3000 else 0.0
+        lambda_normal_grad = opt.lambda_normal_grad if iteration > 15000 else 0.0
         lambda_avg_scale = opt.lambda_avg_scale if iteration > 3000 else 0.0
         lambda_max_scale = opt.lambda_max_scale if iteration > 3000 else 0.0
 
