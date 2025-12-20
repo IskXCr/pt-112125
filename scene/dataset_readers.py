@@ -93,12 +93,12 @@ def readColmapCameras(cam_extrinsics, cam_intrinsics, images_folder):
             FovY = focal2fov(focal_length_y, height)
             FovX = focal2fov(focal_length_x, width)
         else:
-            assert False, "Colmap camera model not handled: only undistorted datasets (PINHOLE or SIMPLE_PINHOLE cameras) supported!"
+            assert False, f"Colmap camera model not handled: only undistorted datasets (PINHOLE or SIMPLE_PINHOLE cameras) supported! Provided: {intr.model}"
         basename = os.path.basename(extr.name)
         base, ext = os.path.splitext(basename)
         image_path = os.path.join(images_folder, basename)
         image_name = base
-        mask_path = os.path.join(images_folder, base + "_mask" + ext)
+        mask_path = os.path.join(images_folder, base + "_mask" + ".png")
         image = Image.open(image_path)
 
         cam_info = CameraInfo(uid=uid, R=R, T=T, FovY=FovY, FovX=FovX, image=image,
@@ -133,7 +133,7 @@ def storePly(path, xyz, rgb):
     ply_data = PlyData([vertex_element])
     ply_data.write(path)
 
-def readColmapSceneInfo(path, images, masks, eval, llffhold=8):
+def readColmapSceneInfo(path, images, eval, llffhold=8):
     try:
         cameras_extrinsic_file = os.path.join(path, "sparse/0", "images.bin")
         cameras_intrinsic_file = os.path.join(path, "sparse/0", "cameras.bin")
@@ -149,8 +149,7 @@ def readColmapSceneInfo(path, images, masks, eval, llffhold=8):
     cam_infos_unsorted = readColmapCameras(
         cam_extrinsics=cam_extrinsics,
         cam_intrinsics=cam_intrinsics,
-        images_folder=os.path.join(path, reading_dir),
-        masks_folder=os.path.join(path, masks)
+        images_folder=os.path.join(path, reading_dir)
     )
     cam_infos = sorted(cam_infos_unsorted.copy(), key = lambda x : x.image_name)
 
@@ -195,7 +194,7 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
         frames = contents["frames"]
         for idx, frame in enumerate(frames):
             cam_name = os.path.join(path, frame["file_path"] + extension)
-            mask_path = os.path.join(path, frame["file_path"] + "_mask" + extension)
+            mask_path = os.path.join(path, frame["file_path"] + "_mask" + ".png")
 
             # NeRF 'transform_matrix' is a camera-to-world transform
             c2w = np.array(frame["transform_matrix"])
