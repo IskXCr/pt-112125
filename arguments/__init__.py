@@ -89,7 +89,7 @@ class OptimizationParams(ParamGroup):
         self.lambda_dist = 5000
         self.lambda_normal = 1.0
         self.lambda_normal_grad = 1
-        self.lambda_avg_scale = 0.5
+        self.lambda_avg_scale = 0.7
         self.lambda_max_scale = 1.0
         self.lambda_mask = 1.8
         self.lambda_rgb = 0.2
