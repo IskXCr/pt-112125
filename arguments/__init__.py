@@ -93,13 +93,16 @@ class OptimizationParams(ParamGroup):
         self.lambda_max_scale = 1.0
         self.lambda_mask = 1.8
         self.lambda_rgb = 0.2
-        self.opacity_cull = 0.5
+        self.opacity_cull = 0.05
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
-        self.opacity_prune_cooldown = 2500
         self.densify_from_iter = 500
         self.densify_until_iter = 15_000
-        self.densify_grad_threshold = 0.00006
+        self.densify_grad_threshold = 0.00012
+        self.prune_floaters_from_iter = 7000
+        self.prune_floaters_until_iter = 15_000
+        self.prune_floaters_interval = 3000
+        self.prune_floaters_eps = 0.05
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):

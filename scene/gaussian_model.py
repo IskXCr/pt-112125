@@ -18,7 +18,7 @@ from utils.system_utils import mkdir_p
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
-from utils.graphics_utils import BasicPointCloud
+from utils.graphics_utils import BasicPointCloud, floater_mask_dbscan_open3d
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 
 class GaussianModel:
@@ -393,18 +393,40 @@ class GaussianModel:
         self.densify_and_clone(grads, max_grad, extent)
         self.densify_and_split(grads, max_grad, extent)
 
-        if min_opacity == None:
-            prune_mask = (self.get_opacity < -114514).squeeze()
-        else:
-            prune_mask = (self.get_opacity < min_opacity).squeeze()
-        if max_screen_size:
-            big_points_vs = self.max_radii2D > max_screen_size
-            big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
-            prune_mask = torch.logical_or(torch.logical_or(prune_mask, big_points_vs), big_points_ws)
-        self.prune_points(prune_mask)
-
+        self.opacity_prune(min_opacity, extent, max_screen_size)
         torch.cuda.empty_cache()
 
     def add_densification_stats(self, viewspace_point_tensor, update_filter):
         self.xyz_gradient_accum[update_filter] += torch.norm(viewspace_point_tensor.grad[update_filter], dim=-1, keepdim=True)
         self.denom[update_filter] += 1
+    
+    def opacity_prune(self, min_opacity, extent, max_screen_size, print_stats: bool=False):
+        prune_mask = (self.get_opacity < min_opacity).squeeze()
+        if max_screen_size:
+            big_points_vs = self.max_radii2D > max_screen_size
+            big_points_ws = self.get_scaling.max(dim=1).values > 0.1 * extent
+            prune_mask = torch.logical_or(torch.logical_or(prune_mask, big_points_vs), big_points_ws)
+        if print_stats:
+            n_pruned = prune_mask.sum()
+            n_pts = self._xyz.shape[0]
+            print(f"\nPruning {n_pruned}/{n_pts} ({n_pruned*100.0/n_pts:.3f}%) points")
+        self.prune_points(prune_mask)
+
+    @torch.no_grad()
+    def cluster_prune(self, eps: float):
+        print("\nPruning points")
+        prune_mask = ~floater_mask_dbscan_open3d(self.get_xyz, eps=eps).squeeze()
+        print(f"Pruning {prune_mask.long().sum()} points")
+        self.prune_points(prune_mask)
+    
+    def cluster_prune_direct(self, eps: float=5e-2):
+        print("\nPruning points")
+        prune_mask = floater_mask_dbscan_open3d(self.get_xyz, eps=eps).squeeze()
+        print(f"Pruning {prune_mask.long().sum()} points")
+
+        self._xyz = self._xyz[prune_mask]
+        self._features_dc = self._features_dc[prune_mask]
+        self._features_rest = self._features_rest[prune_mask]
+        self._opacity = self._opacity[prune_mask]
+        self._scaling = self._scaling[prune_mask]
+        self._rotation = self._rotation[prune_mask]

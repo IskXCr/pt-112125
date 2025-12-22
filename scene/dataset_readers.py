@@ -21,6 +21,7 @@ import json
 from pathlib import Path
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import SH2RGB
+from utils.point_utils import spherical_fibonacci
 from scene.gaussian_model import BasicPointCloud
 
 class CameraInfo(NamedTuple):
@@ -258,6 +259,9 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
         
         # We create random points inside the bounds of the synthetic Blender scenes
         xyz = np.random.random((num_pts, 3)) * 2.6 - 1.3
+        # Create an analytical Fibonacci sphere and let the algorithm contract by itself
+        # xyz = spherical_fibonacci(num_pts, "cpu").numpy() * 1.3
+
         shs = np.random.random((num_pts, 3)) / 255.0
         pcd = BasicPointCloud(points=xyz, colors=SH2RGB(shs), normals=np.zeros((num_pts, 3)))
 

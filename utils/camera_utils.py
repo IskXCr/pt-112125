@@ -16,7 +16,6 @@ import torchvision
 import cv2
 from utils.general_utils import PILtoTorch
 from utils.graphics_utils import fov2focal
-from utils.image_utils import dilate_mask
 
 WARNED = False
 MASK_READ = False
@@ -50,14 +49,28 @@ def loadCam(args, id, cam_info, resolution_scale):
             print("[ INFO ] Dataset has provided at least one non-empty mask. You would see this info only once.")
             print(f"[ INFO ] Path of the target mask: {cam_info.mask_path}")
             MASK_READ = True
-        alpha_mask = torch.from_numpy(cv2.imread(cam_info.mask_path, 0) > 0).cuda()[None]
-        assert alpha_mask.ndim == 3
-        if args.dilate_mask:
-            alpha_mask = dilate_mask(alpha_mask[0], args.dilation_radius)[None]
-            alpha_mask = alpha_mask.expand(3, -1, -1)
+        mask_np = cv2.imread(cam_info.mask_path, 0)
+        if mask_np is None:
+            raise FileNotFoundError(f"Failed to read mask image at: {cam_info.mask_path}")
+
+        # Keep mask aligned with the (potentially) resized RGB image.
+        # Note: cv2.resize expects (width, height).
+        if mask_np.shape[1] != resolution[0] or mask_np.shape[0] != resolution[1]:
+            mask_np = cv2.resize(mask_np, dsize=resolution, interpolation=cv2.INTER_NEAREST)
+
+        # CPU dilation with OpenCV (fast, avoids CUDA OOM)
+        if args.dilate_mask and int(args.dilation_radius) > 0:
+            r = int(args.dilation_radius)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))
+            mask_np = cv2.dilate(mask_np, kernel, iterations=1)
+
+        mask_bool = (mask_np > 0)
         if args.invert_mask:
-            alpha_mask = ~alpha_mask
-        alpha_mask = alpha_mask.cpu()
+            mask_bool = ~mask_bool
+
+        alpha_mask = torch.from_numpy(mask_bool)[None]
+        assert alpha_mask.ndim == 3
+        alpha_mask = alpha_mask.expand(3, -1, -1).contiguous()
     else:
         alpha_mask = None
     gt_image = resized_image_rgb

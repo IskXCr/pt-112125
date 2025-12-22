@@ -35,3 +35,24 @@ def depth_to_normal(view, depth):
     normal_map = torch.nn.functional.normalize(torch.cross(dx, dy, dim=-1), dim=-1)
     output[1:-1, 1:-1, :] = normal_map
     return output
+
+def spherical_fibonacci(N, device="cuda"):
+    """
+    Near-uniform points for arbitrary N (O(N)). Deterministic.
+    """
+    N = int(N)
+    if N <= 1:
+        p = torch.tensor([[0., 0., 1.]], device=device)
+        return p.to(torch.float32)
+    i = torch.arange(N, device=device, dtype=torch.float64) + 0.5
+    phi = (1.0 + math.sqrt(5.0)) / 2.0
+    golden_angle = 2.0 * math.pi * (1.0 - 1.0 / phi)
+
+    z = 1.0 - 2.0 * i / N # equal-area in z
+    r = torch.sqrt(torch.clamp(1.0 - z*z, min=0))
+    theta = golden_angle * i
+    x = r * torch.cos(theta)
+    y = r * torch.sin(theta)
+    pts = torch.stack([x, y, z], dim=1)
+    pts = pts / torch.linalg.norm(pts, dim=1, keepdim=True)
+    return pts.to(dtype=torch.float32)

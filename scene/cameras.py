@@ -29,22 +29,15 @@ class Camera(nn.Module):
         self.FoVy = FoVy
         self.image_name = image_name
 
-        try:
-            self.data_device = torch.device(data_device)
-        except Exception as e:
-            print(e)
-            print(f"[Warning] Custom device {data_device} failed, fallback to default cuda device" )
-            self.data_device = torch.device("cuda")
-
-        self.original_image = image.clamp(0.0, 1.0).cuda() # move to device at dataloader
+        self.original_image = image.clamp(0.0, 1.0)
         self.image_width = self.original_image.shape[2]
         self.image_height = self.original_image.shape[1]
 
         if alpha_mask is not None:
-            alpha_mask = alpha_mask.to(dtype=torch.float, device=self.data_device)[0:1]
+            alpha_mask = alpha_mask.to(dtype=torch.float)[0:1]
 
             alpha_mask = alpha_mask.reshape(-1, self.image_height, self.image_width)
-            self.gt_alpha_mask = alpha_mask.cuda()
+            self.gt_alpha_mask = alpha_mask
             # self.original_image *= gt_alpha_mask.to(self.data_device)
         else:
             # self.original_image *= torch.ones((1, self.image_height, self.image_width), device=self.data_device) # do we need this?
