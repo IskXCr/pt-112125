@@ -16,9 +16,9 @@ import open3d as o3d
 from typing import NamedTuple, Optional, Tuple
 
 class BasicPointCloud(NamedTuple):
-    points : np.array
-    colors : np.array
-    normals : np.array
+    points : Optional[torch.Tensor]
+    colors : Optional[torch.Tensor]
+    normals : Optional[torch.Tensor]
 
 def geom_transform_points(points, transf_matrix):
     P, _ = points.shape
