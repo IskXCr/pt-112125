@@ -20,6 +20,7 @@ from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud, floater_mask_dbscan_open3d
 from utils.general_utils import strip_symmetric, build_scaling_rotation
+from utils.init_utils import z_axis_to_quat
 
 class GaussianModel:
 
@@ -123,17 +124,17 @@ class GaussianModel:
 
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
-        fused_point_cloud = torch.tensor(np.asarray(pcd.points)).float().cuda()
-        fused_color = RGB2SH(torch.tensor(np.asarray(pcd.colors)).float().cuda())
+        fused_point_cloud = pcd.points.float().cuda()
+        fused_color = RGB2SH(pcd.colors.float().cuda())
         features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
         features[:, :3, 0 ] = fused_color
         features[:, 3:, 1:] = 0.0
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
-        dist2 = torch.clamp_min(distCUDA2(torch.from_numpy(np.asarray(pcd.points)).float().cuda()), 0.0000001)
+        dist2 = torch.clamp_min(distCUDA2(pcd.points), 0.0000001)
         scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 2)
-        rots = torch.rand((fused_point_cloud.shape[0], 4), device="cuda")
+        rots = z_axis_to_quat(pcd.normals)
 
         opacities = self.inverse_opacity_activation(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
 
