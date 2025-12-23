@@ -13,3 +13,4 @@ eval
 *.npz
 **/tmp
 datasets/
+test_*.py

@@ -29,12 +29,12 @@ class Camera(nn.Module):
         self.FoVy = FoVy
         self.image_name = image_name
 
-        self.original_image = image.clamp(0.0, 1.0)
+        self.original_image = image.clamp(0.0, 1.0).pin_memory()
         self.image_width = self.original_image.shape[2]
         self.image_height = self.original_image.shape[1]
 
         if alpha_mask is not None:
-            alpha_mask = alpha_mask.to(dtype=torch.float)[0:1]
+            alpha_mask = alpha_mask.to(dtype=torch.float)[0:1].contiguous().pin_memory()
 
             alpha_mask = alpha_mask.reshape(-1, self.image_height, self.image_width)
             self.gt_alpha_mask = alpha_mask
