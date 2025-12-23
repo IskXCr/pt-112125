@@ -25,6 +25,18 @@ def extract_vh_args_from_cameras(cameras: list[Camera]):
 
     return masks, transforms
 
+def apply_gaussian_blur(
+    masks: torch.Tensor,
+    kernel_size: int=3,
+    sigma: float=0.1
+):
+    return torchhull.gaussian_blur(
+        masks, # [B, H, W, 1]
+        kernel_size,
+        sigma,
+        sparse=True,
+    )
+
 def estimate_bounding_sphere(cameras: list[Camera]):
     """
     Estimate the bounding sphere given camera pose

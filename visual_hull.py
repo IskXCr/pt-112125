@@ -22,7 +22,12 @@ import uuid
 from tqdm import tqdm
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
-from utils.init_utils import extract_vh_args_from_cameras, compute_visual_hull, estimate_bounding_sphere
+from utils.init_utils import (
+    extract_vh_args_from_cameras,
+    apply_gaussian_blur,
+    estimate_bounding_sphere,
+    compute_visual_hull,
+)
 import kaolin
 
 def prepare_output_and_logger(args):    
@@ -45,6 +50,8 @@ def main(dataset, opt, pipe):
     cams = scene.getTrainCameras().copy()
     print("Running extraction...")
     masks, transforms = extract_vh_args_from_cameras(cams)
+    print("Smoothing masks")
+    masks = apply_gaussian_blur(masks)
     # print(masks.shape)
     # print(transforms.shape)
     print("Estimating bounding sphere")
