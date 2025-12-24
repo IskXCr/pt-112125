@@ -84,9 +84,6 @@ class Scene:
             self.train_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.train_cameras, resolution_scale, args)
             print("Loading Test Cameras")
             self.test_cameras[resolution_scale] = cameraList_from_camInfos(scene_info.test_cameras, resolution_scale, args)
-        
-        if not scene_info.point_cloud:
-            print("Initial ply is not present.")
 
         if self.loaded_iter:
             print("[ INFO ] Loading trained CHECKPOINT.")
@@ -100,29 +97,30 @@ class Scene:
             )
             return
         
-        print("Computing initialization via visual hull...")
-        cams = self.getTrainCameras().copy()
-        print("Running extraction...")
-        masks, transforms = extract_vh_args_from_cameras(cams)
-        print("Smoothing masks")
-        masks = apply_gaussian_blur(masks)
-        # print(masks.shape)
-        # print(transforms.shape)
-        print("Estimating bounding sphere")
-        center, radius = estimate_bounding_sphere(cams)
-        print(f"Center={center}, radius={radius}")
-        print("Computing visual hull...")
-        verts, faces = compute_visual_hull(masks, transforms, center, radius, level=12)
-        print(f"Extracted mesh: n_vertices: {verts.shape[0]}, n_triangles: {faces.shape[0]}")
-        assert verts.shape[0] != 0 and faces.shape[0] != 0, "invalid construct"
-        print(f"Sampling {args.init_n_points} pts")
-        pts, nrm = sample_mesh_kaolin(verts, faces, args.init_n_points)
-        shs = random_color(args.init_n_points)
-        scene_info.point_cloud = BasicPointCloud(points=pts, colors=shs, normals=nrm)
-        print(f"Saving sampled ply from visull hull mesh to {scene_info.ply_path}")
-        storePly(scene_info.ply_path, pts, nrm, shs)
-        print(f"Creating from sampled point cloud...")
-        self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
+        if not scene_info.point_cloud:
+            print("[ INFO ] Initial ply is not present. Computing initialization via visual hull...")
+            cams = self.getTrainCameras().copy()
+            print("Running extraction...")
+            masks, transforms = extract_vh_args_from_cameras(cams)
+            print("Smoothing masks")
+            masks = apply_gaussian_blur(masks)
+            # print(masks.shape)
+            # print(transforms.shape)
+            print("Estimating bounding sphere")
+            center, radius = estimate_bounding_sphere(cams)
+            print(f"Center={center}, radius={radius}")
+            print("Computing visual hull...")
+            verts, faces = compute_visual_hull(masks, transforms, center, radius, level=12)
+            print(f"Extracted mesh: n_vertices: {verts.shape[0]}, n_triangles: {faces.shape[0]}")
+            assert verts.shape[0] != 0 and faces.shape[0] != 0, "invalid construct"
+            print(f"Sampling {args.init_n_points} pts")
+            pts, nrm = sample_mesh_kaolin(verts, faces, args.init_n_points)
+            shs = random_color(args.init_n_points)
+            scene_info.point_cloud = BasicPointCloud(points=pts, colors=shs, normals=nrm)
+            print(f"Saving sampled ply from visull hull mesh to {scene_info.ply_path}")
+            storePly(scene_info.ply_path, pts, nrm, shs)
+            print(f"Creating from sampled point cloud...")
+            self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))
