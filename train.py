@@ -21,18 +21,20 @@ from utils.loss_utils import (
 )
 from gaussian_renderer import render, network_gui
 import sys
+import open3d as o3d
 from scene import Scene, GaussianModel
 from utils.general_utils import safe_state
 import uuid
 from tqdm import tqdm
 from utils.image_utils import psnr, render_net_image
+from utils.init_utils import BoundedMeshExtractor
+from functools import partial
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
-try:
-    from torch.utils.tensorboard import SummaryWriter
-    TENSORBOARD_FOUND = True
-except ImportError:
-    TENSORBOARD_FOUND = False
+from typing import Optional
+
+from torch.utils.tensorboard import SummaryWriter
+TENSORBOARD_FOUND = True
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint):
     first_iter = 0
@@ -55,6 +57,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     ema_loss_for_log = 0.0
     ema_dist_for_log = 0.0
     ema_normal_for_log = 0.0
+
+    mesh: Optional[o3d.t.geometry.TriangleMesh] = None
 
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
@@ -153,6 +157,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
+                print("\n[ITER {}] Saving fused mesh now.".format(iteration))
+                mesh = BoundedMeshExtractor.reconstruct(
+                    render_f=partial(render, pc=gaussians, pipe=pipe, bg_color=background),
+                    cameras=scene.getTrainCameras().copy(),
+                    save_mesh_path=os.path.join(scene.model_path, "mesh", f"iteration_{iteration}", f"fused_post.ply")
+                )
             
             # Densification
             if iteration < opt.densify_until_iter:
@@ -165,7 +175,6 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 
                 if iteration % opt.opacity_reset_interval == 0 or (dataset.white_background and iteration == opt.densify_from_iter):
                     gaussians.reset_opacity()
-                    last_opacity_reset_iter = iteration
 
             # Optimizer step
             if iteration < opt.iterations:
@@ -173,9 +182,19 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 gaussians.optimizer.zero_grad(set_to_none = True)
 
             # Cluster-based Pruning
-            if iteration >= opt.densify_until_iter and iteration > opt.prune_floaters_from_iter and iteration < opt.prune_floaters_until_iter and iteration % opt.prune_floaters_interval == 0:
+            if iteration >= opt.densify_until_iter and iteration > opt.prune_floaters_from_iter\
+                and iteration < opt.prune_floaters_until_iter and iteration % opt.prune_floaters_interval == 0:
+                
                 gaussians.opacity_prune(opt.opacity_cull, scene.cameras_extent, size_threshold, True)
-                # gaussians.cluster_prune(opt.prune_floaters_eps)
+                print(f"\n[ITER {iteration}] Running intermediate mesh extraction")
+                save_mesh_path = os.path.join(scene.model_path, f"bounded_mesh_iter_{iteration}.ply")
+                mesh = BoundedMeshExtractor.reconstruct(
+                    render_f=partial(render, pc=gaussians, pipe=pipe, bg_color=background),
+                    cameras=scene.getTrainCameras().copy(),
+                    save_mesh_path=save_mesh_path
+                )
+                print(f"[ITER {iteration}] Pruning Gaussians...")
+                gaussians.mesh_prune(mesh, opt.prune_floaters_eps)
                 torch.cuda.empty_cache()
 
             if (iteration in checkpoint_iterations):

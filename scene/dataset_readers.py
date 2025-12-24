@@ -26,6 +26,8 @@ from utils.point_utils import spherical_fibonacci
 from scene.gaussian_model import BasicPointCloud
 from typing import Optional
 
+__visual_hull_samples_name = "visual_hull_samples.ply"
+
 class CameraInfo(NamedTuple):
     uid: int
     R: np.array
@@ -157,7 +159,7 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
     
     pcd = None
 
-    ply_path = os.path.join(path, "visual_hull_sample.ply")
+    ply_path = os.path.join(path, __visual_hull_samples_name)
 
     if os.path.exists(ply_path):
         print(f"Fetching existing ply from {ply_path}")
@@ -238,7 +240,7 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
 
     pcd = None
 
-    ply_path = os.path.join(path, "visual_hull_sample.ply")
+    ply_path = os.path.join(path, __visual_hull_samples_name)
 
     if os.path.exists(ply_path):
         print(f"Fetching existing ply from {ply_path}")

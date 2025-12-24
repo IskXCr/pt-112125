@@ -153,4 +153,3 @@ def floater_mask_dbscan_open3d(
 
     mask = torch.from_numpy(keep_mask_np).to(device=positions_cuda.device).bool().view(-1, 1)
     return mask.to(device=positions_cuda.device)
-

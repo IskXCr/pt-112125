@@ -20,13 +20,7 @@ from scene.cameras import Camera
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
 from utils.init_utils import (
-    storePly,
-    extract_vh_args_from_cameras,
-    apply_gaussian_blur,
-    estimate_bounding_sphere,
-    compute_visual_hull,
-    sample_mesh_kaolin,
-    random_color
+    BoundedVisullHullExtractor
 )
 
 class Scene:
@@ -97,29 +91,8 @@ class Scene:
             )
             return
         
-        # if not scene_info.point_cloud:
-        # print("[ INFO ] Initial ply is not present. Computing initialization via visual hull...")
         print("[ DEBUG ] Force computing initialization via visual hull...")
-        cams = self.getTrainCameras().copy()
-        print("Running extraction...")
-        masks, transforms = extract_vh_args_from_cameras(cams)
-        print("Smoothing masks")
-        masks = apply_gaussian_blur(masks)
-        # print(masks.shape)
-        # print(transforms.shape)
-        print("Estimating bounding sphere")
-        center, radius = estimate_bounding_sphere(cams)
-        print(f"Center={center}, radius={radius}")
-        print("Computing visual hull...")
-        verts, faces = compute_visual_hull(masks, transforms, center, radius, level=12)
-        print(f"Extracted mesh: n_vertices: {verts.shape[0]}, n_triangles: {faces.shape[0]}")
-        assert verts.shape[0] != 0 and faces.shape[0] != 0, "invalid construct"
-        print(f"Sampling {args.init_n_points} pts")
-        pts, nrm = sample_mesh_kaolin(verts, faces, args.init_n_points)
-        shs = random_color(args.init_n_points)
-        scene_info.point_cloud = BasicPointCloud(points=pts, colors=shs, normals=nrm)
-        print(f"Saving sampled ply from visull hull mesh to {scene_info.ply_path}")
-        storePly(scene_info.ply_path, pts, nrm, shs)
+        scene_info.point_cloud = BoundedVisullHullExtractor.reconstruct(self.getTrainCameras().copy(), args.init_n_points, scene_info.ply_path)
         
         print(f"Creating from sampled point cloud...")
         self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)

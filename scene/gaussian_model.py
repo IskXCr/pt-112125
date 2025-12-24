@@ -20,8 +20,9 @@ from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud, floater_mask_dbscan_open3d
 from utils.general_utils import strip_symmetric, build_scaling_rotation
-from utils.init_utils import z_axis_to_quat
+from utils.init_utils import z_axis_to_quat, filter_points_near_mesh_from_torch
 from functools import partial
+import open3d as o3d
 
 class GaussianModel:
 
@@ -124,20 +125,24 @@ class GaussianModel:
             self.active_sh_degree += 1
 
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
+        fp32_kwargs = {
+            "dtype": torch.float32,
+            "device": "cuda"
+        }
         self.spatial_lr_scale = spatial_lr_scale
         fused_point_cloud = pcd.points
         fused_color = RGB2SH(pcd.colors)
-        features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2))
+        features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2), **fp32_kwargs)
         features[:, :3, 0 ] = fused_color
         features[:, 3:, 1:] = 0.0
 
         print("Number of points at initialisation : ", fused_point_cloud.shape[0])
 
         dist2 = torch.clamp_min(distCUDA2(pcd.points), 0.0000001)
-        scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 2)
+        scales = torch.log(torch.sqrt(dist2))[...,None].repeat(1, 2).to(**fp32_kwargs)
         rots = z_axis_to_quat(pcd.normals)
 
-        opacities = self.inverse_opacity_activation(0.1 * torch.ones((fused_point_cloud.shape[0], 1), dtype=torch.float, device="cuda"))
+        opacities = self.inverse_opacity_activation(0.1 * torch.ones((fused_point_cloud.shape[0], 1), **fp32_kwargs))
 
         self._xyz = nn.Parameter(fused_point_cloud.requires_grad_(True))
         self._features_dc = nn.Parameter(features[:,:,0:1].transpose(1, 2).contiguous().requires_grad_(True))
@@ -423,12 +428,30 @@ class GaussianModel:
     
     def cluster_prune_direct(self, eps: float=5e-2):
         print("\nPruning points")
-        prune_mask = floater_mask_dbscan_open3d(self.get_xyz, eps=eps).squeeze()
-        print(f"Pruning {prune_mask.long().sum()} points")
+        kept_mask = floater_mask_dbscan_open3d(self.get_xyz, eps=eps).squeeze()
+        print(f"Pruning {kept_mask.long().sum()} points")
 
-        self._xyz = self._xyz[prune_mask]
-        self._features_dc = self._features_dc[prune_mask]
-        self._features_rest = self._features_rest[prune_mask]
-        self._opacity = self._opacity[prune_mask]
-        self._scaling = self._scaling[prune_mask]
-        self._rotation = self._rotation[prune_mask]
+        self._xyz = self._xyz[kept_mask]
+        self._features_dc = self._features_dc[kept_mask]
+        self._features_rest = self._features_rest[kept_mask]
+        self._opacity = self._opacity[kept_mask]
+        self._scaling = self._scaling[kept_mask]
+        self._rotation = self._rotation[kept_mask]
+
+    @torch.no_grad()
+    def mesh_prune(self, mesh: o3d.geometry.TriangleMesh, eps: float):
+        kept_mask, _ = filter_points_near_mesh_from_torch(self.get_xyz, mesh, eps)
+        prune_mask = ~kept_mask
+        print(f"Mesh-Heuristic-Based Pruning: Pruning {prune_mask.sum()} points")
+        self.prune_points(prune_mask)
+    
+    @torch.no_grad()
+    def mesh_prune_direct(self, mesh: o3d.geometry.TriangleMesh, eps: float):
+        kept_mask, _ = filter_points_near_mesh_from_torch(self.get_xyz, mesh, eps)
+        print(f"Mesh-Heuristic-Based Pruning: Pruning {(~kept_mask).sum()} points")
+        self._xyz = self._xyz[kept_mask]
+        self._features_dc = self._features_dc[kept_mask]
+        self._features_rest = self._features_rest[kept_mask]
+        self._opacity = self._opacity[kept_mask]
+        self._scaling = self._scaling[kept_mask]
+        self._rotation = self._rotation[kept_mask]

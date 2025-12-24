@@ -3,11 +3,17 @@ import torch.nn.functional as F
 import torchhull
 import kaolin
 import numpy as np
+import open3d as o3d
+import open3d.core as o3c
+import os
+import gc
 from plyfile import PlyData, PlyElement
 from functools import partial
+from tqdm import tqdm
+from typing import Callable
 
 from scene.cameras import Camera
-from .graphics_utils import getProjectionMatrix
+from .graphics_utils import getProjectionMatrix, BasicPointCloud
 from .render_utils import focus_point_fn
 
 def fetchPly(path):
@@ -34,6 +40,47 @@ def storePly(path, xyz, normals, rgb):
     vertex_element = PlyElement.describe(elements, 'vertex')
     ply_data = PlyData([vertex_element])
     ply_data.write(path)
+
+def z_axis_to_quat(z_dirs: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
+    """
+    Args
+    ----
+    z_dirs : (N,3) torch.Tensor
+        Each row is the desired (possibly non-unit) rotated z-axis.
+    Returns
+    -------
+    quat  : (N,4) torch.Tensor
+        Unit quaternions in [w, x, y, z] order.
+    """
+    # 1. normalise the incoming axes
+    z = F.normalize(z_dirs, dim=-1, eps=eps)                       # (N,3)
+
+    # 2. choose a stable 'up' for each vector
+    world_up = torch.tensor([0., 1., 0.], device=z.device)         # (3,)
+    alt_up   = torch.tensor([1., 0., 0.], device=z.device)
+    world_up = world_up.expand_as(z)                               # (N,3)
+    alt_up   = alt_up.expand_as(z)
+    use_alt  = (torch.abs((world_up * z).sum(-1)) > 0.99).unsqueeze(-1)
+    up       = torch.where(use_alt, alt_up, world_up)              # (N,3)
+
+    # 3. construct orthonormal basis
+    x = F.normalize(torch.cross(up, z, dim=-1), dim=-1, eps=eps)   # (N,3)
+    y = torch.cross(z, x, dim=-1)                                  # (N,3)
+    R = torch.stack((x, y, z), dim=-1)                             # (N,3,3)
+
+    # 4. matrix → quaternion (w first)
+    trace = R[:, 0, 0] + R[:, 1, 1] + R[:, 2, 2]
+    w = torch.sqrt(torch.clamp(1.0 + trace, min=0.0)) * 0.5
+
+    # avoid division by very small w
+    denom = 4.0 * w + eps
+    xq = (R[:, 2, 1] - R[:, 1, 2]) / denom
+    yq = (R[:, 0, 2] - R[:, 2, 0]) / denom
+    zq = (R[:, 1, 0] - R[:, 0, 1]) / denom
+
+    quat = torch.stack((w, xq, yq, zq), dim=-1)                    # (N,4)
+    quat = F.normalize(quat, dim=-1, eps=eps)
+    return quat
 
 # Transform z coords from [0, 1] to [-1, 1]
 __builtin_NDC_transform_M = torch.tensor([
@@ -158,49 +205,197 @@ def sample_mesh_kaolin(verts: torch.Tensor,
 
     return pts, nrm
 
-def z_axis_to_quat(z_dirs: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
-    """
-    Args
-    ----
-    z_dirs : (N,3) torch.Tensor
-        Each row is the desired (possibly non-unit) rotated z-axis.
-    Returns
-    -------
-    quat  : (N,4) torch.Tensor
-        Unit quaternions in [w, x, y, z] order.
-    """
-    # 1. normalise the incoming axes
-    z = F.normalize(z_dirs, dim=-1, eps=eps)                       # (N,3)
-
-    # 2. choose a stable 'up' for each vector
-    world_up = torch.tensor([0., 1., 0.], device=z.device)         # (3,)
-    alt_up   = torch.tensor([1., 0., 0.], device=z.device)
-    world_up = world_up.expand_as(z)                               # (N,3)
-    alt_up   = alt_up.expand_as(z)
-    use_alt  = (torch.abs((world_up * z).sum(-1)) > 0.99).unsqueeze(-1)
-    up       = torch.where(use_alt, alt_up, world_up)              # (N,3)
-
-    # 3. construct orthonormal basis
-    x = F.normalize(torch.cross(up, z, dim=-1), dim=-1, eps=eps)   # (N,3)
-    y = torch.cross(z, x, dim=-1)                                  # (N,3)
-    R = torch.stack((x, y, z), dim=-1)                             # (N,3,3)
-
-    # 4. matrix → quaternion (w first)
-    trace = R[:, 0, 0] + R[:, 1, 1] + R[:, 2, 2]
-    w = torch.sqrt(torch.clamp(1.0 + trace, min=0.0)) * 0.5
-
-    # avoid division by very small w
-    denom = 4.0 * w + eps
-    xq = (R[:, 2, 1] - R[:, 1, 2]) / denom
-    yq = (R[:, 0, 2] - R[:, 2, 0]) / denom
-    zq = (R[:, 1, 0] - R[:, 0, 1]) / denom
-
-    quat = torch.stack((w, xq, yq, zq), dim=-1)                    # (N,4)
-    quat = F.normalize(quat, dim=-1, eps=eps)
-    return quat
-
 def random_color(n_pts: int):
     return torch.rand((n_pts, 3), dtype=torch.float32, device="cuda") / 255.0
 
-# class BoundedMeshExtractor:
-#     def __init__(self, gaussians, render_kwargs):
+def camera_to_o3d(cam: Camera) -> o3d.camera.PinholeCameraParameters:
+    W = cam.image_width
+    H = cam.image_height
+    
+    ndc2pix = torch.tensor([
+        [W / 2, 0, 0, (W-1) / 2],
+        [0, H / 2, 0, (H-1) / 2],
+        [0, 0, 0, 1]]).float().cuda().T
+
+    intrins =  (cam.projection_matrix @ ndc2pix)[:3,:3].T
+    intrinsic=o3d.camera.PinholeCameraIntrinsic(
+        width=cam.image_width,
+        height=cam.image_height,
+        cx = intrins[0,2].item(),
+        cy = intrins[1,2].item(), 
+        fx = intrins[0,0].item(), 
+        fy = intrins[1,1].item()
+    )
+
+    extrinsic=np.asarray((cam.world_view_transform.T).cpu().numpy())
+    camera = o3d.camera.PinholeCameraParameters()
+    camera.extrinsic = extrinsic
+    camera.intrinsic = intrinsic
+
+    return camera
+
+class BoundedVisullHullExtractor:
+    @classmethod
+    def reconstruct(self, cameras: list[Camera], init_n_points: int, save_sample_path: str):
+        print("[BoundedVisullHullExtractor] Running extraction...")
+        masks, transforms = extract_vh_args_from_cameras(cameras)
+
+        print("[BoundedVisullHullExtractor] Smoothing masks")
+        masks = apply_gaussian_blur(masks)
+
+        print("[BoundedVisullHullExtractor] Estimating bounding sphere")
+        center, radius = estimate_bounding_sphere(cameras)
+        print(f"[BoundedVisullHullExtractor] Center={center}, radius={radius}")
+
+        print("[BoundedVisullHullExtractor] Computing visual hull...")
+        verts, faces = compute_visual_hull(masks, transforms, center, radius, level=12)
+        print(f"[BoundedVisullHullExtractor] Extracted mesh: n_vertices: {verts.shape[0]}, n_triangles: {faces.shape[0]}")
+        assert verts.shape[0] != 0 and faces.shape[0] != 0, "invalid construct"
+
+        print(f"[BoundedVisullHullExtractor] Sampling {init_n_points} pts")
+        pts, nrm = sample_mesh_kaolin(verts, faces, init_n_points)
+        shs = random_color(init_n_points)
+        point_cloud = BasicPointCloud(points=pts, colors=shs, normals=nrm)
+
+        print(f"[BoundedVisullHullExtractor] Saving sampled ply from visull hull mesh to {save_sample_path}")
+        storePly(save_sample_path, pts, nrm, shs)
+        
+        return point_cloud
+
+class BoundedMeshExtractor:
+    @classmethod
+    @torch.no_grad()
+    @torch.cuda.nvtx.range("BoundedMeshExtractor.reconstruction")
+    def reconstruct(
+        self,
+        render_f: Callable,
+        cameras: list[Camera],
+        save_mesh_path: str,
+        mesh_resolution: int=1024,
+        n_clusters_to_keep: int=1000
+    ) -> o3d.t.geometry.TriangleMesh:
+        """
+        Docstring for reconstruction
+        
+        :param render_f: Will be invoked in the form of `render_f(cam, gaussians)`
+        :type render_f: Callable
+        :param gaussians: Description
+        :type gaussians: GaussianModel
+        :param cameras: Description
+        :type cameras: list[Camera]
+        :param mesh_resolution: Description
+        :type mesh_resolution: int
+        :param n_clusters_to_keep: Description
+        :type n_clusters_to_keep: int
+        """
+        print(f"[BoundedMeshExtractor] Estimating bounding sphere")
+        scene_center, scene_radius = estimate_bounding_sphere(cameras)
+        print(f"[BoundedMeshExtractor] center={list(map(lambda x: f'{x:.4e}', scene_center))}, radius={scene_radius:.4e}")
+
+        depth_trunc: float = scene_radius * 2.0
+        voxel_size = depth_trunc / mesh_resolution
+        sdf_trunc = 5.0 * voxel_size
+
+        print(f"[BoundedMeshExtractor] Creating TSDF volume, depth_trunc={depth_trunc:.4e}, voxel_size={voxel_size:.4e}, sdf_trunc={sdf_trunc:.4e}")
+        volume = o3d.pipelines.integration.ScalableTSDFVolume(
+            voxel_length= voxel_size,
+            sdf_trunc=sdf_trunc,
+            color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8
+        )
+        
+        for cam in tqdm(cameras, desc="[BoundedMeshExtractor] Bounded Mesh Extraction..."):
+            render_pkg = render_f(cam)
+            pred_rgb = render_pkg['render']
+            pred_depth = render_pkg['surf_depth']
+
+            # Erase depth outside mask
+            pred_depth[cam.gt_alpha_mask < 0.5] = 0
+
+            o3d_rgbd_image = o3d.geometry.RGBDImage.create_from_color_and_depth(
+                o3d.geometry.Image(np.asarray(np.clip(pred_rgb.permute(1, 2, 0).cpu().numpy(), 0.0, 1.0) * 255, order="C", dtype=np.uint8)),
+                o3d.geometry.Image(np.asarray(pred_depth.permute(1, 2, 0).cpu().numpy(), order="C")),
+                depth_trunc=depth_trunc,
+                convert_rgb_to_intensity=False,
+                depth_scale=1.0
+            )
+
+            o3d_cam = camera_to_o3d(cam)
+            volume.integrate(o3d_rgbd_image, intrinsic=o3d_cam.intrinsic, extrinsic=o3d_cam.extrinsic)
+        
+        mesh: o3d.geometry.TriangleMesh = volume.extract_triangle_mesh()
+        print(f"\n[BoundedMeshExtractor] #vertices before postprocessing {len(mesh.vertices)}")
+
+        print(f"[BoundedMeshExtractor] Running postprocessing clustering: Target #clusters: {n_clusters_to_keep}")
+
+        with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Debug):
+            triangle_clusters, cluster_n_triangles, cluster_area = mesh.cluster_connected_triangles()
+
+        triangle_clusters = np.asanyarray(triangle_clusters)
+        cluster_n_triangles = np.asarray(cluster_n_triangles)
+        cluster_area = np.asarray(cluster_area)
+        n_clusters_to_keep = min(n_clusters_to_keep, cluster_n_triangles.shape[0])
+
+        print(f"[BoundedMeshExtractor] #clusters present: {n_clusters_to_keep}")
+
+        n_cluster = np.sort(cluster_n_triangles.copy())[-n_clusters_to_keep]
+        n_cluster = max(n_cluster, 50) # filter meshes smaller than 50
+        triangles_to_remove = cluster_n_triangles[triangle_clusters] < n_cluster
+        mesh.remove_triangles_by_mask(triangles_to_remove)
+
+        mesh.remove_unreferenced_vertices()
+        mesh.remove_degenerate_triangles()
+
+        print(f"[BoundedMeshExtractor] #vertices after postprocessing {len(mesh.vertices)}")
+
+        print(f"Now trying to convert to o3d.t.geometry.TriangleMesh for further processing.")
+        tmesh = o3d.t.geometry.TriangleMesh.from_legacy(mesh)
+
+        o3d_device = o3d.core.Device("CUDA:0")
+        print(f"[BoundedMeshExtractor] Using o3d_device: {o3d_device}")
+        tmesh = tmesh.to(device=o3d_device)
+
+        o3d.t.io.write_triangle_mesh(save_mesh_path, tmesh)
+        print(f"[BoundedMeshExtractor] Saved mesh to {save_mesh_path}")
+
+        return tmesh
+
+def filter_points_near_mesh_from_torch(
+    pts_xyz_cuda: torch.Tensor,
+    mesh: o3d.t.geometry.TriangleMesh,
+    eps: float
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """
+    Returns:
+        kept_mask:      (N,)  torch.bool on the same CUDA device
+        signed_dists:   (N,)  torch.float32 signed SDF (inside<0, outside>0)
+    """
+    assert pts_xyz_cuda.ndim == 2 and pts_xyz_cuda.shape[1] == 3, "pts must be (N,3)"
+    if pts_xyz_cuda.dtype != torch.float32:
+        pts_xyz_cuda = pts_xyz_cuda.float()
+    pts_xyz_cuda = pts_xyz_cuda.contiguous()
+
+    device_str = f"CPU:0"
+    o3d_dev = o3d.core.Device(device_str)
+    mesh = mesh.to(device=o3d_dev)
+
+    # Zero-copy via DLPack
+    pts_dlpack = torch.utils.dlpack.to_dlpack(pts_xyz_cuda.cpu())
+    o3d_pts = o3d.core.Tensor.from_dlpack(pts_dlpack)
+
+    # Build GPU BVH and compute signed distances
+    scene = o3d.t.geometry.RaycastingScene()
+    _ = scene.add_triangles(mesh)
+    # For watertight meshes we can use signed distance directly.
+    # Negative: inside; Positive: outside.
+    sdf = scene.compute_signed_distance(o3d_pts)  # (N,) Float32 CUDA
+
+    # Make the mask (|SDF| <= thresh)
+    thr = o3d.core.Tensor([eps], dtype=sdf.dtype)
+    keep_mask_o3d = (sdf.abs() <= thr).to(o3d.core.Dtype.Float32)
+
+    # Also export the full signed distance array + boolean mask to torch
+    signed_dists = torch.utils.dlpack.from_dlpack(sdf.to_dlpack()).to(device=pts_xyz_cuda.device)
+    kept_mask = torch.utils.dlpack.from_dlpack(keep_mask_o3d.to_dlpack()).to(device=pts_xyz_cuda.device)
+    kept_mask = (kept_mask > 0)
+
+    return kept_mask, signed_dists

@@ -24,7 +24,7 @@ def post_process_mesh(mesh, cluster_to_keep=1000):
     Post-process a mesh to filter out floaters and disconnected parts
     """
     import copy
-    print("post processing the mesh to have {} clusterscluster_to_kep".format(cluster_to_keep))
+    print("post processing the mesh to have {} clusters to keep".format(cluster_to_keep))
     mesh_0 = copy.deepcopy(mesh)
     with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Debug) as cm:
             triangle_clusters, cluster_n_triangles, cluster_area = (mesh_0.cluster_connected_triangles())
