@@ -21,6 +21,7 @@ from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud, floater_mask_dbscan_open3d
 from utils.general_utils import strip_symmetric, build_scaling_rotation
 from utils.init_utils import z_axis_to_quat
+from functools import partial
 
 class GaussianModel:
 
@@ -39,7 +40,7 @@ class GaussianModel:
         self.covariance_activation = build_covariance_from_scaling_rotation
         self.opacity_activation = torch.sigmoid
         self.inverse_opacity_activation = inverse_sigmoid
-        self.rotation_activation = torch.nn.functional.normalize
+        self.rotation_activation = partial(torch.nn.functional.normalize, dim=-1)
 
 
     def __init__(self, sh_degree : int):
@@ -124,9 +125,9 @@ class GaussianModel:
 
     def create_from_pcd(self, pcd : BasicPointCloud, spatial_lr_scale : float):
         self.spatial_lr_scale = spatial_lr_scale
-        fused_point_cloud = pcd.points.float().cuda()
-        fused_color = RGB2SH(pcd.colors.float().cuda())
-        features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2)).float().cuda()
+        fused_point_cloud = pcd.points
+        fused_color = RGB2SH(pcd.colors)
+        features = torch.zeros((fused_color.shape[0], 3, (self.max_sh_degree + 1) ** 2))
         features[:, :3, 0 ] = fused_color
         features[:, 3:, 1:] = 0.0
 

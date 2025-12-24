@@ -14,11 +14,22 @@ import math
 import numpy as np
 import open3d as o3d
 from typing import NamedTuple, Optional, Tuple
+from dataclasses import dataclass
 
-class BasicPointCloud(NamedTuple):
-    points : Optional[torch.Tensor]
-    colors : Optional[torch.Tensor]
-    normals : Optional[torch.Tensor]
+@dataclass
+class BasicPointCloud:
+    points : torch.Tensor
+    colors : torch.Tensor
+    normals : torch.Tensor
+
+    def __post_init__(self):
+        assert isinstance(self.points, torch.Tensor) and self.points.is_cuda
+        assert isinstance(self.colors, torch.Tensor) and self.colors.is_cuda
+        assert isinstance(self.normals, torch.Tensor) and self.normals.is_cuda
+        N = self.points.shape[0]
+        assert self.points.shape == (N, 3)
+        assert self.colors.shape == (N, 3)
+        assert self.normals.shape == (N, 3)
 
 def geom_transform_points(points, transf_matrix):
     P, _ = points.shape

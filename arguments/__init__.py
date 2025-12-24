@@ -54,7 +54,7 @@ class ModelParams(ParamGroup):
         self.dilate_mask = True
         self.dilation_radius = 1
         self._resolution = -1
-        self.init_n_points = 100000
+        self.init_n_points = 300000 # Controls how many initial points will be sampled on the mesh extarcted by visual hull
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False
