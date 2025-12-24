@@ -4,6 +4,7 @@ import torchhull
 import kaolin
 import numpy as np
 from plyfile import PlyData, PlyElement
+from functools import partial
 
 from scene.cameras import Camera
 from .graphics_utils import getProjectionMatrix
@@ -19,7 +20,7 @@ def fetchPly(path):
     return positions_cuda, colors_cuda, normals_cuda
 
 def storePly(path, xyz, normals, rgb):
-    xyz, normals, rgb = map(lambda x: x.cpu().numpy() if isinstance(x, torch.Tensor) else x, (xyz, normals, rgb))
+    xyz, normals, rgb = map(lambda x: x.contiguous().cpu().numpy(), (xyz, normals, rgb))
     # Define the dtype for the structured array
     dtype = [('x', 'f4'), ('y', 'f4'), ('z', 'f4'),
             ('nx', 'f4'), ('ny', 'f4'), ('nz', 'f4'),
@@ -200,3 +201,6 @@ def z_axis_to_quat(z_dirs: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
 
 def random_color(n_pts: int):
     return torch.rand((n_pts, 3), dtype=torch.float32, device="cuda") / 255.0
+
+# class BoundedMeshExtractor:
+#     def __init__(self, gaussians, render_kwargs):

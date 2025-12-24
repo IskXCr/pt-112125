@@ -47,6 +47,9 @@ class SceneInfo:
     point_cloud: Optional[BasicPointCloud]
     ply_path: str
 
+    def __post_init__(self):
+        assert isinstance(self.point_cloud, BasicPointCloud) or self.point_cloud is None
+
 def getNerfppNorm(cam_info):
     def get_center_and_diag(cam_centers):
         cam_centers = np.hstack(cam_centers)
@@ -239,7 +242,7 @@ def readNerfSyntheticInfo(path, white_background, eval, extension=".png"):
 
     if os.path.exists(ply_path):
         print(f"Fetching existing ply from {ply_path}")
-        pcd = fetchPly(ply_path)
+        pcd = BasicPointCloud(*fetchPly(ply_path))
 
     scene_info = SceneInfo(train_cameras=train_cam_infos,
                            test_cameras=test_cam_infos,
