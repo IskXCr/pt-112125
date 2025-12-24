@@ -347,7 +347,7 @@ class BoundedMeshExtractor:
 
         print(f"[BoundedMeshExtractor] #vertices after postprocessing {len(mesh.vertices)}")
 
-        print(f"Now trying to convert to o3d.t.geometry.TriangleMesh for further processing.")
+        print(f"[BoundedMeshExtractor] Converting to o3d.t.geometry.TriangleMesh for further processing.")
         tmesh = o3d.t.geometry.TriangleMesh.from_legacy(mesh)
 
         o3d_device = o3d.core.Device("CUDA:0")
