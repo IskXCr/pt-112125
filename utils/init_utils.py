@@ -121,27 +121,6 @@ def estimate_bounding_sphere(cameras: list[Camera]):
     radius = np.linalg.norm(c2ws[:,:3,3] - center, axis=-1).min()
     return center.tolist(), radius
 
-def compute_visual_hull(
-    masks: torch.Tensor,
-    transforms: torch.Tensor,
-    camera_center: torch.Tensor,
-    radius: torch.Tensor,
-    level: int=11,
-    masks_partial: bool=False
-) -> tuple[torch.Tensor, torch.Tensor]:
-    verts, faces = torchhull.visual_hull(
-        masks,  # [B, H, W, 1]
-        transforms,  # [B, 4, 4]
-        level,
-        [camera_center[0] - radius, camera_center[1] - radius, camera_center[2] - radius],
-        radius * 2,
-        masks_partial=masks_partial,
-        transforms_convention="opengl",
-        unique_verts=True,
-    )
-    # assert not (faces >= 2 ** 31 - 1).any()
-    return verts, faces
-
 def sample_mesh_kaolin(verts: torch.Tensor,
                        faces: torch.Tensor,
                        num_samples: int = 100_000,
@@ -243,11 +222,24 @@ class BoundedVisullHullExtractor:
         transforms: torch.Tensor,
         center: list[float],
         radius: float,
-        level: int
+        level: int,
+        isolevel: float = 0.5
     ):
         print(f"[BoundedVisullHullExtractor] =========================================")
         print(f"[BoundedVisullHullExtractor] Computing visual hull at level {level}...")
-        verts, faces = compute_visual_hull(masks, transforms, center, radius, level=level)
+        print(f"[BoundedVisullHullExtractor] Isolevel: {isolevel}")
+        verts, faces = torchhull.visual_hull(
+            masks,  # [B, H, W, 1]
+            transforms,  # [B, 4, 4]
+            level,
+            [center[0] - radius, center[1] - radius, center[2] - radius],
+            radius * 2,
+            masks_partial=False,
+            transforms_convention="opengl",
+            unique_verts=True,
+        )
+        # assert not (faces >= 2 ** 31 - 1).any()
+        
         print(f"[BoundedVisullHullExtractor] Extracted mesh: n_vertices: {verts.shape[0]}, n_triangles: {faces.shape[0]}")
         assert verts.shape[0] != 0 and faces.shape[0] != 0, "invalid construct"
 
@@ -263,7 +255,8 @@ class BoundedVisullHullExtractor:
         cameras: list[Camera],
         init_n_points: int,
         save_sample_path: str,
-        levels: list[int] = [11]
+        levels: list[int] = [11],
+        isolevel: float = 0.5
     ):
         print("[BoundedVisullHullExtractor] Running extraction...")
         masks, transforms = extract_vh_args_from_cameras(cameras)
@@ -282,7 +275,8 @@ class BoundedVisullHullExtractor:
             transforms,
             center,
             radius,
-            levels[0]
+            levels[0],
+            isolevel
         )
 
         point_cloud = BasicPointCloud(points=pts, colors=shs, normals=nrm)

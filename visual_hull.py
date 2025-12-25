@@ -22,13 +22,6 @@ import uuid
 from tqdm import tqdm
 from argparse import ArgumentParser, Namespace
 from arguments import ModelParams, PipelineParams, OptimizationParams
-from utils.init_utils import (
-    extract_vh_args_from_cameras,
-    apply_gaussian_blur,
-    estimate_bounding_sphere,
-    compute_visual_hull,
-)
-import kaolin
 
 def prepare_output_and_logger(args):    
     if not args.model_path:
