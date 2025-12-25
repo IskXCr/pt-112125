@@ -27,7 +27,7 @@ class Scene:
 
     gaussians : GaussianModel
 
-    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0]):
+    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], skip_visual_hull: bool=False):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -91,14 +91,17 @@ class Scene:
             )
             return
         
-        print("[ DEBUG ] Force computing initialization via visual hull...")
-        scene_info.point_cloud = BoundedVisullHullExtractor.reconstruct(
-            self.getTrainCameras().copy(),
-            args.init_n_points,
-            scene_info.ply_path,
-            [args.visual_hull_level]
-        )
+        if not skip_visual_hull:
+            print("[ DEBUG ] Force computing initialization via visual hull...")
+            scene_info.point_cloud = BoundedVisullHullExtractor.reconstruct(
+                self.getTrainCameras().copy(),
+                args.init_n_points,
+                scene_info.ply_path,
+                [args.visual_hull_level]
+            )
         
+        assert scene_info.point_cloud is not None
+
         print(f"Creating from sampled point cloud...")
         self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
 

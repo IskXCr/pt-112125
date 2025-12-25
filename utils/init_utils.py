@@ -327,7 +327,7 @@ class BoundedMeshExtractor:
             color_type=o3d.pipelines.integration.TSDFVolumeColorType.RGB8
         )
         
-        for cam in tqdm(cameras, desc="[BoundedMeshExtractor] Bounded Mesh Extraction..."):
+        for cam in tqdm(cameras, desc="[BoundedMeshExtractor] Bounded Mesh Extraction"):
             render_pkg = render_f(cam)
             pred_rgb = render_pkg['render']
             pred_depth = render_pkg['surf_depth']
