@@ -47,30 +47,30 @@ def prepare_output_and_logger(args):
 def main(dataset, opt, pipe):
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians)
-    cams = scene.getTrainCameras().copy()
-    print("Running extraction...")
-    masks, transforms = extract_vh_args_from_cameras(cams)
-    print("Smoothing masks")
-    masks = apply_gaussian_blur(masks)
+    # cams = scene.getTrainCameras().copy()
+    # print("Running extraction...")
+    # masks, transforms = extract_vh_args_from_cameras(cams)
+    # print("Smoothing masks")
+    # masks = apply_gaussian_blur(masks)
     # print(masks.shape)
     # print(transforms.shape)
-    print("Estimating bounding sphere")
-    center, radius = estimate_bounding_sphere(cams)
-    print(f"Center={center}, radius={radius}")
-    print("Computing visual hull...")
-    verts, faces = compute_visual_hull(masks, transforms, center, radius)
-    print(verts.shape)
+    # print("Estimating bounding sphere")
+    # center, radius = estimate_bounding_sphere(cams)
+    # print(f"Center={center}, radius={radius}")
+    # print("Computing visual hull...")
+    # verts, faces = compute_visual_hull(masks, transforms, center, radius)
+    # print(verts.shape)
     # print(verts.dtype)
-    print(faces.shape)
+    # print(faces.shape)
     # print(faces.dtype)
     
-    print("Saving USD...")
-    kaolin.io.usd.export_mesh(
-        "./new_stage.usd",
-        vertices=verts,
-        faces=faces,
-        overwrite=True,          # set True if you want to overwrite
-    )
+    # print("Saving USD...")
+    # kaolin.io.usd.export_mesh(
+    #     "./new_stage.usd",
+    #     vertices=verts,
+    #     faces=faces,
+    #     overwrite=True,          # set True if you want to overwrite
+    # )
 
     print("Complete")
 

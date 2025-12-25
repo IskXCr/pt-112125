@@ -101,7 +101,7 @@ def extract_vh_args_from_cameras(cameras: list[Camera]):
 def apply_gaussian_blur(
     masks: torch.Tensor,
     kernel_size: int=3,
-    sigma: float=0.1
+    sigma: float=1.0
 ):
     return torchhull.gaussian_blur(
         masks, # [B, H, W, 1]
@@ -236,25 +236,55 @@ def camera_to_o3d(cam: Camera) -> o3d.camera.PinholeCameraParameters:
 
 class BoundedVisullHullExtractor:
     @classmethod
-    def reconstruct(self, cameras: list[Camera], init_n_points: int, save_sample_path: str):
-        print("[BoundedVisullHullExtractor] Running extraction...")
-        masks, transforms = extract_vh_args_from_cameras(cameras)
-
-        print("[BoundedVisullHullExtractor] Smoothing masks")
-        masks = apply_gaussian_blur(masks)
-
-        print("[BoundedVisullHullExtractor] Estimating bounding sphere")
-        center, radius = estimate_bounding_sphere(cameras)
-        print(f"[BoundedVisullHullExtractor] Center={center}, radius={radius}")
-
-        print("[BoundedVisullHullExtractor] Computing visual hull...")
-        verts, faces = compute_visual_hull(masks, transforms, center, radius, level=12)
+    def sample_once(
+        cls,
+        init_n_points: int,
+        masks: torch.Tensor,
+        transforms: torch.Tensor,
+        center: list[float],
+        radius: float,
+        level: int
+    ):
+        print(f"[BoundedVisullHullExtractor] =========================================")
+        print(f"[BoundedVisullHullExtractor] Computing visual hull at level {level}...")
+        verts, faces = compute_visual_hull(masks, transforms, center, radius, level=level)
         print(f"[BoundedVisullHullExtractor] Extracted mesh: n_vertices: {verts.shape[0]}, n_triangles: {faces.shape[0]}")
         assert verts.shape[0] != 0 and faces.shape[0] != 0, "invalid construct"
 
         print(f"[BoundedVisullHullExtractor] Sampling {init_n_points} pts")
         pts, nrm = sample_mesh_kaolin(verts, faces, init_n_points)
         shs = random_color(init_n_points)
+        print(f"[BoundedVisullHullExtractor] =========================================")
+        return pts, nrm, shs
+
+    @classmethod
+    def reconstruct(
+        cls,
+        cameras: list[Camera],
+        init_n_points: int,
+        save_sample_path: str,
+        levels: list[int] = [11]
+    ):
+        print("[BoundedVisullHullExtractor] Running extraction...")
+        masks, transforms = extract_vh_args_from_cameras(cameras)
+
+        print("[BoundedVisullHullExtractor] Smoothing masks")
+        masks = (apply_gaussian_blur(masks) > 0.5).to(dtype=torch.float32)
+        print(f"[BoundedVisullHullExtractor] #Non-Binary-Elements: {((masks > 0) & (masks < 1.0)).sum()}")
+
+        print("[BoundedVisullHullExtractor] Estimating bounding sphere")
+        center, radius = estimate_bounding_sphere(cameras)
+        print(f"[BoundedVisullHullExtractor] Center={center}, radius={radius}")
+
+        pts, nrm, shs = BoundedVisullHullExtractor.sample_once(
+            init_n_points,
+            masks,
+            transforms,
+            center,
+            radius,
+            levels[0]
+        )
+
         point_cloud = BasicPointCloud(points=pts, colors=shs, normals=nrm)
 
         print(f"[BoundedVisullHullExtractor] Saving sampled ply from visull hull mesh to {save_sample_path}")
@@ -267,7 +297,7 @@ class BoundedMeshExtractor:
     @torch.no_grad()
     @torch.cuda.nvtx.range("BoundedMeshExtractor.reconstruction")
     def reconstruct(
-        self,
+        cls,
         render_f: Callable,
         cameras: list[Camera],
         save_mesh_path: str,

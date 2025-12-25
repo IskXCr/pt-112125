@@ -158,10 +158,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
                 print("\n[ITER {}] Saving fused mesh now.".format(iteration))
+                parent_dir = os.path.join(scene.model_path, "mesh", f"iteration_{iteration}")
+                os.makedirs(parent_dir, exist_ok=True)
                 mesh = BoundedMeshExtractor.reconstruct(
                     render_f=partial(render, pc=gaussians, pipe=pipe, bg_color=background),
                     cameras=scene.getTrainCameras().copy(),
-                    save_mesh_path=os.path.join(scene.model_path, "mesh", f"iteration_{iteration}", f"fused_post.ply")
+                    save_mesh_path=os.path.join(parent_dir, f"fused_post.ply")
                 )
             
             # Densification
@@ -187,11 +189,12 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 
                 gaussians.opacity_prune(opt.opacity_cull, scene.cameras_extent, size_threshold, True)
                 print(f"\n[ITER {iteration}] Running intermediate mesh extraction")
-                save_mesh_path = os.path.join(scene.model_path, f"bounded_mesh_iter_{iteration}.ply")
+                parent_dir = os.path.join(scene.model_path, "mesh", f"iteration_{iteration}")
+                os.makedirs(parent_dir, exist_ok=True)
                 mesh = BoundedMeshExtractor.reconstruct(
                     render_f=partial(render, pc=gaussians, pipe=pipe, bg_color=background),
                     cameras=scene.getTrainCameras().copy(),
-                    save_mesh_path=save_mesh_path
+                    save_mesh_path=os.path.join(parent_dir, f"fused_post.ply")
                 )
                 print(f"[ITER {iteration}] Pruning Gaussians...")
                 gaussians.mesh_prune(mesh, opt.prune_floaters_eps)

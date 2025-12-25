@@ -102,8 +102,8 @@ class OptimizationParams(ParamGroup):
         self.densify_grad_threshold = 0.0001
         self.prune_floaters_from_iter = 15_000
         self.prune_floaters_until_iter = 30_000
-        self.prune_floaters_interval = 5000
-        self.prune_floaters_eps = 3e-2
+        self.prune_floaters_interval = 13_500
+        self.prune_floaters_eps = 5e-2
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):
