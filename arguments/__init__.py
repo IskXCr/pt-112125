@@ -88,7 +88,7 @@ class OptimizationParams(ParamGroup):
         self.rotation_lr = 0.001
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
-        self.lambda_dist = 5000
+        self.lambda_dist = 10000
         self.lambda_normal = 1.0
         self.lambda_normal_grad = 1
         self.lambda_avg_scale = 1.0
@@ -104,7 +104,7 @@ class OptimizationParams(ParamGroup):
         self.prune_floaters_from_iter = 15_000
         self.prune_floaters_until_iter = 30_000
         self.prune_floaters_interval = 13_500
-        self.prune_floaters_eps = 5e-2
+        self.prune_floaters_eps = 1e-2
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):
