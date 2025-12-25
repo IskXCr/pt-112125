@@ -92,7 +92,12 @@ class Scene:
             return
         
         print("[ DEBUG ] Force computing initialization via visual hull...")
-        scene_info.point_cloud = BoundedVisullHullExtractor.reconstruct(self.getTrainCameras().copy(), args.init_n_points, scene_info.ply_path)
+        scene_info.point_cloud = BoundedVisullHullExtractor.reconstruct(
+            self.getTrainCameras().copy(),
+            args.init_n_points,
+            scene_info.ply_path,
+            [args.visual_hull_level]
+        )
         
         print(f"Creating from sampled point cloud...")
         self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
