@@ -59,7 +59,8 @@ def main(dataset, pipe, iteration):
     tmesh = tmesh_cuda.cpu()
     print(f"[reconstruct.py] pymeshfix")
 
-    tmesh = tmesh.fill_holes(20.0)
+    tmesh_filled = tmesh.fill_holes(1e8)
+    o3d.t.io.write_triangle_mesh(os.path.join(parent_dir, "reconstruct_filled.ply"), tmesh_filled)
     verts, faces = tmesh.vertex["positions"].numpy(), tmesh.triangle["indices"].numpy()
 
     meshfix = pymeshfix.MeshFix(verts, faces)
