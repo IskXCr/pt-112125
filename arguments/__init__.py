@@ -56,6 +56,7 @@ class ModelParams(ParamGroup):
         self._resolution = -1
         self.init_n_points = 300000 # Controls how many initial points will be sampled on the mesh extarcted by visual hull
         self.visual_hull_level = 11 # Use a rough level for initialization
+        self.isolevel = 0.5
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False

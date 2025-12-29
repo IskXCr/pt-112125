@@ -10,7 +10,8 @@ import gc
 from plyfile import PlyData, PlyElement
 from functools import partial
 from tqdm import tqdm
-from typing import Callable
+from typing import Callable, Optional, Union
+from pathlib import Path
 
 from scene.cameras import Camera
 from .graphics_utils import getProjectionMatrix, BasicPointCloud
@@ -215,47 +216,131 @@ def camera_to_o3d(cam: Camera) -> o3d.camera.PinholeCameraParameters:
 
 class BoundedVisullHullExtractor:
     @classmethod
-    def sample_once(
+    def save_mesh_from_torch(
         cls,
-        init_n_points: int,
-        masks: torch.Tensor,
-        transforms: torch.Tensor,
-        center: list[float],
-        radius: float,
-        level: int,
-        isolevel: float = 0.5
-    ):
-        print(f"[BoundedVisullHullExtractor] =========================================")
-        print(f"[BoundedVisullHullExtractor] Computing visual hull at level {level}...")
-        print(f"[BoundedVisullHullExtractor] Isolevel: {isolevel}")
-        verts, faces = torchhull.visual_hull(
-            masks,  # [B, H, W, 1]
-            transforms,  # [B, 4, 4]
-            level,
-            [center[0] - radius, center[1] - radius, center[2] - radius],
-            radius * 2,
-            masks_partial=False,
-            transforms_convention="opengl",
-            unique_verts=True,
-        )
-        # assert not (faces >= 2 ** 31 - 1).any()
-        
-        print(f"[BoundedVisullHullExtractor] Extracted mesh: n_vertices: {verts.shape[0]}, n_triangles: {faces.shape[0]}")
-        assert verts.shape[0] != 0 and faces.shape[0] != 0, "invalid construct"
+        verts: torch.Tensor,
+        faces: torch.Tensor,
+        path: Union[str, Path],
+        *,
+        vertex_colors: Optional[torch.Tensor] = None,   # (V,3) float in [0,1]
+        vertex_normals: Optional[torch.Tensor] = None,  # (V,3) float
+        compute_normals: bool = True,
+        write_ascii: bool = False,
+        compressed: bool = True,
+        print_progress: bool = False,
+    ) -> o3d.geometry.TriangleMesh:
+        """
+        Save a triangle mesh using Open3D.
 
-        print(f"[BoundedVisullHullExtractor] Sampling {init_n_points} pts")
-        pts, nrm = sample_mesh_kaolin(verts, faces, init_n_points)
-        shs = random_color(init_n_points)
-        print(f"[BoundedVisullHullExtractor] =========================================")
-        return pts, nrm, shs
+        Args:
+            verts: (V, 3) float tensor (CPU or CUDA).
+            faces: (F, 3) int tensor (CPU or CUDA).
+            path: output file path. Extension decides format (.ply, .obj, .stl, ...).
+            vertex_colors: optional (V, 3) float in [0, 1].
+            vertex_normals: optional (V, 3) float normals.
+            compute_normals: compute normals if vertex_normals not provided.
+            write_ascii: if True, write ASCII (where supported, e.g. .ply).
+            compressed: if True, compress (where supported).
+            print_progress: Open3D progress.
+
+        Returns:
+            The Open3D TriangleMesh instance that was written.
+        """
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+        # ---- Validate shapes ----
+        if verts.ndim != 2 or verts.shape[-1] != 3:
+            raise ValueError(f"verts must have shape (V, 3), got {tuple(verts.shape)}")
+        if faces.ndim != 2 or faces.shape[-1] != 3:
+            raise ValueError(f"faces must have shape (F, 3), got {tuple(faces.shape)}")
+
+        V = int(verts.shape[0])
+        F = int(faces.shape[0])
+
+        # ---- Move to CPU numpy ----
+        v_np = verts.detach().to(dtype=torch.float32, device="cpu").contiguous().numpy()
+
+        # faces: Open3D expects int32 triangles
+        # (if your faces are 1-indexed for some reason, convert to 0-indexed before saving)
+        f_cpu = faces.detach().to(device="cpu").contiguous()
+        if not (f_cpu.dtype in (torch.int32, torch.int64)):
+            f_cpu = f_cpu.to(torch.int64)
+        f_np = f_cpu.to(torch.int32).numpy()
+
+        # ---- Basic bounds check (helps catch bad indexing) ----
+        if F > 0:
+            f_min = int(f_np.min())
+            f_max = int(f_np.max())
+            if f_min < 0 or f_max >= V:
+                raise ValueError(
+                    f"faces contain out-of-range vertex indices: min={f_min}, max={f_max}, but V={V}."
+                )
+
+        mesh = o3d.geometry.TriangleMesh(
+            vertices=o3d.utility.Vector3dVector(v_np.astype(np.float64, copy=False)),
+            triangles=o3d.utility.Vector3iVector(f_np),
+        )
+
+        # ---- Optional vertex colors ----
+        if vertex_colors is not None:
+            if vertex_colors.shape != (V, 3):
+                raise ValueError(
+                    f"vertex_colors must have shape (V, 3) matching verts, got {tuple(vertex_colors.shape)}"
+                )
+            c_np = (
+                vertex_colors.detach()
+                .to(dtype=torch.float32, device="cpu")
+                .contiguous()
+                .numpy()
+            )
+            # Clamp to [0,1] for safety
+            c_np = np.clip(c_np, 0.0, 1.0)
+            mesh.vertex_colors = o3d.utility.Vector3dVector(c_np.astype(np.float64, copy=False))
+
+        # ---- Optional normals ----
+        if vertex_normals is not None:
+            if vertex_normals.shape != (V, 3):
+                raise ValueError(
+                    f"vertex_normals must have shape (V, 3) matching verts, got {tuple(vertex_normals.shape)}"
+                )
+            n_np = (
+                vertex_normals.detach()
+                .to(dtype=torch.float32, device="cpu")
+                .contiguous()
+                .numpy()
+            )
+            # Normalize (optional, but helps)
+            eps = 1e-12
+            n_norm = np.linalg.norm(n_np, axis=1, keepdims=True)
+            n_np = n_np / (n_norm + eps)
+            mesh.vertex_normals = o3d.utility.Vector3dVector(n_np.astype(np.float64, copy=False))
+        elif compute_normals:
+            # If your mesh is non-manifold / has flipped winding, this may look odd in viewers,
+            # but it's still fine for saving geometry.
+            mesh.compute_vertex_normals()
+
+        # ---- Write ----
+        ok = o3d.io.write_triangle_mesh(
+            str(path),
+            mesh,
+            write_ascii=write_ascii,
+            compressed=compressed,
+            print_progress=print_progress,
+        )
+        if not ok:
+            raise RuntimeError(f"Open3D failed to write mesh to: {path}")
+
+        return mesh
 
     @classmethod
     def reconstruct(
         cls,
         cameras: list[Camera],
         init_n_points: int,
+        save_mesh_path: str,
         save_sample_path: str,
-        levels: list[int] = [11],
+        level: int = 11,
         isolevel: float = 0.5
     ):
         print("[BoundedVisullHullExtractor] Running extraction...")
@@ -269,17 +354,46 @@ class BoundedVisullHullExtractor:
         center, radius = estimate_bounding_sphere(cameras)
         print(f"[BoundedVisullHullExtractor] Center={center}, radius={radius}")
 
-        pts, nrm, shs = BoundedVisullHullExtractor.sample_once(
-            init_n_points,
-            masks,
-            transforms,
-            center,
-            radius,
-            levels[0],
-            isolevel
+        cube_corner_bfl = [center[0] - radius, center[1] - radius, center[2] - radius]
+        cube_length = radius * 2
+
+        print(f"[BoundedVisullHullExtractor] =========================================")
+        print(f"[BoundedVisullHullExtractor] Computing visual hull at level {level}...")
+        print(f"[BoundedVisullHullExtractor] cube_corner_bfl: {cube_corner_bfl}")
+        print(f"[BoundedVisullHullExtractor] cube_length: {cube_length}")
+        volume = torchhull.sparse_visual_hull_field(
+            masks,  # [B, H, W, 1]
+            transforms,  # [B, 4, 4]
+            level,
+            [center[0] - radius, center[1] - radius, center[2] - radius],
+            radius * 2,
+            masks_partial=False,
+            transforms_convention="opengl"
         )
+        # assert not (faces >= 2 ** 31 - 1).any()
+
+        print(f"[BoundedVisullHullExtractor] =========================================")
+        print(f"[BoundedVisullHullExtractor] Provided isolevel: {isolevel}")
+        print(f"[BoundedVisullHullExtractor] Running marching cubes")
+
+        cube_center = torch.tensor([[center[0], center[1], center[2]]], dtype=torch.float32, device="cuda")
+        verts, faces = torchhull.marching_cubes(volume, isolevel)
+        verts = verts * radius + cube_center
+
+        print(f"[BoundedVisullHullExtractor] Extracted mesh: n_vertices: {verts.shape[0]}, n_triangles: {faces.shape[0]}")
+        assert verts.shape[0] != 0 and faces.shape[0] != 0, "invalid construct"
+        print(f"[BoundedVisullHullExtractor] =========================================")
+
+
+        print(f"[BoundedVisullHullExtractor] Sampling {init_n_points} pts")
+        pts, nrm = sample_mesh_kaolin(verts, faces, init_n_points)
+        shs = random_color(init_n_points)
+        print(f"[BoundedVisullHullExtractor] =========================================")
 
         point_cloud = BasicPointCloud(points=pts, colors=shs, normals=nrm)
+
+        print(f"[BoundedVisullHullExtractor] Saving visull hull mesh to {save_mesh_path}")
+        cls.save_mesh_from_torch(verts, faces, save_mesh_path, compute_normals=False)
 
         print(f"[BoundedVisullHullExtractor] Saving sampled ply from visull hull mesh to {save_sample_path}")
         storePly(save_sample_path, pts, nrm, shs)

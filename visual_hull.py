@@ -14,6 +14,7 @@ import torch
 import math
 from random import randint
 from gaussian_renderer import render, network_gui
+from arguments import get_combined_args
 import sys
 from scene import Scene, GaussianModel
 from scene.cameras import Camera
@@ -37,7 +38,7 @@ def prepare_output_and_logger(args):
     with open(os.path.join(args.model_path, "cfg_args"), 'w') as cfg_log_f:
         cfg_log_f.write(str(Namespace(**vars(args))))
 
-def main(dataset, opt, pipe):
+def main(dataset, pipe):
     gaussians = GaussianModel(dataset.sh_degree)
     scene = Scene(dataset, gaussians)
     # cams = scene.getTrainCameras().copy()
@@ -70,16 +71,18 @@ def main(dataset, opt, pipe):
 if __name__ == "__main__":
     # Set up command line argument parser
     parser = ArgumentParser(description="Training script parameters")
-    lp = ModelParams(parser)
-    op = OptimizationParams(parser)
-    pp = PipelineParams(parser)
-    args = parser.parse_args(sys.argv[1:])
+    parser.add_argument("--iteration", default=-1, type=int)
+    model = ModelParams(parser, sentinel=True)
+    pipeline = PipelineParams(parser)
+    args = get_combined_args(parser)
+
+    print(f"Running visual hull {args.model_path}, iteration={args.iteration}")
     
     # Initialize system state (RNG)
     safe_state(None)
     os.makedirs(args.model_path, exist_ok = True)
 
     # Start GUI server, configure and run training
-    dataset, opt, pipe = lp.extract(args), op.extract(args), pp.extract(args)
+    dataset, pipe = model.extract(args), pipeline.extract(args)
     prepare_output_and_logger(dataset)
-    main(dataset, opt, pipe)
+    main(dataset, pipe)

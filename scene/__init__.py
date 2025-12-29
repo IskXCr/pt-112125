@@ -13,6 +13,7 @@ import os
 import random
 import json
 import numpy as np
+from pathlib import Path
 from utils.system_utils import searchForMaxIteration
 from scene.dataset_readers import sceneLoadTypeCallbacks
 from scene.gaussian_model import BasicPointCloud, GaussianModel
@@ -96,8 +97,10 @@ class Scene:
             scene_info.point_cloud = BoundedVisullHullExtractor.reconstruct(
                 self.getTrainCameras().copy(),
                 args.init_n_points,
+                os.path.join(Path(scene_info.ply_path).parent, "visual_hull_mesh.ply"),
                 scene_info.ply_path,
-                [args.visual_hull_level]
+                args.visual_hull_level,
+                args.isolevel
             )
         
         assert scene_info.point_cloud is not None
