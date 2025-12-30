@@ -10,11 +10,13 @@
 #
 
 import torch
+import torchvision
 import numpy as np
 import os
 import math
 from tqdm import tqdm
 from utils.render_utils import save_img_f32, save_img_u8
+from utils.vis_utils import map_single_val_to_image
 from functools import partial
 import open3d as o3d
 import trimesh
@@ -292,6 +294,7 @@ class GaussianExtractor(object):
             gt = viewpoint_cam.original_image[0:3, :, :]
             save_img_u8(gt.permute(1,2,0).cpu().numpy(), os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
             save_img_u8(self.rgbmaps[idx].permute(1,2,0).cpu().numpy(), os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
-            save_img_f32(self.depthmaps[idx][0].cpu().numpy(), os.path.join(vis_path, 'depth_{0:05d}'.format(idx) + ".tiff"))
+            torchvision.utils.save_image(map_single_val_to_image(self.depthmaps[idx].cuda().permute(1, 2, 0)).permute(2, 0, 1), os.path.join(vis_path, 'depth_{0:05d}'.format(idx) + ".png"))
+            # save_img_f32(self.depthmaps[idx][0].cpu().numpy(), os.path.join(vis_path, 'depth_{0:05d}'.format(idx) + ".tiff"))
             save_img_u8(self.normals[idx].permute(1,2,0).cpu().numpy() * 0.5 + 0.5, os.path.join(vis_path, 'normal_{0:05d}'.format(idx) + ".png"))
             save_img_u8(self.depth_normals[idx].permute(1,2,0).cpu().numpy() * 0.5 + 0.5, os.path.join(vis_path, 'depth_normal_{0:05d}'.format(idx) + ".png"))
