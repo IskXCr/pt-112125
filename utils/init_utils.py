@@ -387,6 +387,7 @@ class BoundedVisullHullExtractor:
 
         print(f"[BoundedVisullHullExtractor] Sampling {init_n_points} pts")
         pts, nrm = sample_mesh_kaolin(verts, faces, init_n_points)
+        nrm = -nrm
         shs = random_color(init_n_points)
         print(f"[BoundedVisullHullExtractor] =========================================")
 
