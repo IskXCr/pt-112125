@@ -28,7 +28,7 @@ class Scene:
 
     gaussians : GaussianModel
 
-    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], skip_visual_hull: bool=False):
+    def __init__(self, args : ModelParams, gaussians : GaussianModel, load_iteration=None, shuffle=True, resolution_scales=[1.0], skip_visual_hull: bool=False, skip_gaussian_init: bool=False):
         """b
         :param path: Path to colmap scene main folder.
         """
@@ -104,9 +104,12 @@ class Scene:
             )
         
         assert scene_info.point_cloud is not None
-
-        print(f"Creating from sampled point cloud...")
-        self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
+        
+        if not skip_gaussian_init:
+            print(f"Creating from sampled point cloud...")
+            self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
+        else:
+            print(f"Skipping Gaussian init")
 
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))
