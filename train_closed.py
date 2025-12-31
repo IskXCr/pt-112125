@@ -111,32 +111,34 @@ def _look_at_opencv_w2c(
     extr[:, :3, 3] = t
     return extr
 
+def spherical_fibonacci(N, device="cuda"):
+    """
+    Near-uniform points for arbitrary N (O(N)). Deterministic.
+    """
+    N = int(N)
+    if N <= 1:
+        p = torch.tensor([[0., 0., 1.]], device=device)
+        return p.to(torch.float32)
+    i = torch.arange(N, device=device, dtype=torch.float64) + 0.5
+    phi = (1.0 + math.sqrt(5.0)) / 2.0
+    golden_angle = 2.0 * math.pi * (1.0 - 1.0 / phi)
+
+    z = 1.0 - 2.0 * i / N # equal-area in z
+    r = torch.sqrt(torch.clamp(1.0 - z*z, min=0))
+    theta = golden_angle * i
+    x = r * torch.cos(theta)
+    y = r * torch.sin(theta)
+    pts = torch.stack([x, y, z], dim=1)
+    pts = pts / torch.linalg.norm(pts, dim=1, keepdim=True)
+    return pts.to(dtype=torch.float32)
+
 # https://github.com/maximeraafat/BlenderNeRF/blob/main/helper.py
 def sample_from_sphere(scene: Class_0):
-    np.random.seed(scene.seed)
-
     N = scene.n_frames
-    theta = np.random.random(N) * 2.0 * math.pi
-
-    if scene.upper_views:
-        # Uniform hemisphere: z ~ U[0,1], theta ~ U[0,2pi]
-        z = np.random.random(N)  # [0,1]
-        r = np.sqrt(np.clip(1.0 - z * z, 0.0, 1.0))
-        unit_x = np.cos(theta) * r
-        unit_y = np.sin(theta) * r
-        unit_z = z
-    else:
-        # Uniform sphere
-        u = np.random.random(N)
-        phi = np.arccos(1.0 - 2.0 * u)
-        unit_x = np.cos(theta) * np.sin(phi)
-        unit_y = np.sin(theta) * np.sin(phi)
-        unit_z = np.cos(phi)
-
-    unit = np.stack([unit_x, unit_y, unit_z], axis=1).astype(np.float32)  # (N,3)
+    pts = spherical_fibonacci(N)
 
     center = torch.tensor(scene.center, device="cuda", dtype=torch.float32)
-    cam_centers = center.unsqueeze(0) + float(scene.radius) * torch.from_numpy(unit).to("cuda")
+    cam_centers = center.unsqueeze(0) + float(scene.radius) * pts
 
     extr_w2c = _look_at_opencv_w2c(cam_centers, center)
     return extr_w2c
@@ -701,7 +703,7 @@ if __name__ == "__main__":
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
     args = parser.parse_args(sys.argv[1:])
-    args.save_iterations.append(args.iterations)
+    # args.save_iterations.append(args.iterations)
     
     print("Optimizing " + args.model_path)
 
