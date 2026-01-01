@@ -417,7 +417,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     first_iter = 15000
     final_iter = 32000
     lambda_depth_distortion_ex = 1e5
-    lambda_avg_scale_ex = 0.7
+    lambda_avg_scale_ex = 0.0
 
     gaussians.training_setup(opt)
     if checkpoint:
