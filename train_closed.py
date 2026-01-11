@@ -11,6 +11,7 @@
 
 import os
 import torch
+import torchvision
 import math
 from random import randint
 from utils.loss_utils import (
@@ -317,8 +318,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     # ===========================================
     print("===========================================")
     # 0. Parameters
-    N = 120 # number of cameras
+    N = 360 # number of cameras
     P = 300000 # number of sample points
+    RADIUS_FIX_COEFF = 1.35
 
     print(f"Number of desired cameras: {N}, sample points: {P}")
     
@@ -346,6 +348,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     print("Estimating bounding sphere")
 
     center, radius = estimate_bounding_sphere(scene.getTrainCameras())
+    radius = radius * RADIUS_FIX_COEFF
     center = np.array(center)
     print(f"Bounding sphere with center {center} and radius {radius}")
 
@@ -370,6 +373,13 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         silhouettes.append((depth > 0).float().reshape(-1, H, W).contiguous().cpu())
     
     print(f"Silhouette shape: {silhouettes[0].shape}")
+
+    target_dir = os.path.join(scene.model_path, "est_sil")
+    os.makedirs(name=target_dir, exist_ok=True)
+    print(f"Debug: Trying to save all secondary alpha masks")
+    for i in tqdm(range(N), desc="Saving silhouttes"):
+        sil = silhouettes[i]
+        torchvision.utils.save_image(sil, os.path.join(target_dir, f"{i}.png"))
 
     # ===========================================
     # 3. Now we run visual hull once to get an initial point distribution
@@ -403,7 +413,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         cameras,
         P,
         os.path.join(scene.model_path, "closed", "visual_hull_mesh.ply"),
-        os.path.join(scene.model_path, "closed", "visual_hull_samples.ply")
+        os.path.join(scene.model_path, "closed", "visual_hull_samples.ply"),
+        dataset.visual_hull_level
     )
 
     # Last, initialize Gaussians
@@ -541,7 +552,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 mesh = BoundedMeshExtractor.reconstruct(
                     render_f=partial(render, pc=gaussians, pipe=pipe, bg_color=background),
                     cameras=cameras.copy(),
-                    save_mesh_path=os.path.join(parent_dir, f"fused_post.ply")
+                    save_mesh_path=os.path.join(parent_dir, f"fused_post.ply"),
+                    n_clusters_to_keep=1
                 )
             
             # Densification
@@ -572,7 +584,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 mesh = BoundedMeshExtractor.reconstruct(
                     render_f=partial(render, pc=gaussians, pipe=pipe, bg_color=background),
                     cameras=cameras.copy(),
-                    save_mesh_path=os.path.join(parent_dir, f"fused_post.ply")
+                    save_mesh_path=os.path.join(parent_dir, f"fused_post.ply"),
+                    n_clusters_to_keep=1
                 )
                 print(f"[ITER {iteration}] Pruning Gaussians...")
                 gaussians.mesh_prune(mesh, opt.prune_floaters_eps)

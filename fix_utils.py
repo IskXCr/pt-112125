@@ -176,7 +176,7 @@ def seal_bottom_with_cap(mesh_path: str,
                          plane_mesh_path: str,
                          out_path: str,
                          mode: str = "auto",
-                         join_percentile: float = 20.0,
+                         join_percentile: float = 5.0,
                          band_width_ratio: float = 0.03,
                          cap_stacks: int = 48,
                          cap_slices: int = 128):
@@ -273,7 +273,7 @@ def seal_bottom_with_cap(mesh_path: str,
         hb = (band_pts - p0) @ n_unit
 
         # Put the disc at the join height (optionally a bit lower to “bite” into the rim)
-        disc_height = float(h_q) - 0.95 * band_tol   # try -0.25*band_tol .. -1.0*band_tol
+        disc_height = float(h_q) - 0.25 * band_tol   # try -0.25*band_tol .. -1.0*band_tol
         plane_point = p0 + disc_height * n_unit
 
         # 2D coordinates relative to plane_point along (u, v)
@@ -287,7 +287,7 @@ def seal_bottom_with_cap(mesh_path: str,
 
         (cx, cy), r = fit_circle_2d_pratt(xy)
 
-        r_eff = max(r * 1.26, 1e-6)
+        r_eff = max(r * 1.08, 1e-6)
         center3d = plane_point + cx * u + cy * v
 
         disc = make_disc(center_on_plane=center3d, n=n_unit, radius=r_eff, slices=cap_slices)
