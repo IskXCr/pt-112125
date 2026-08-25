@@ -414,7 +414,9 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         P,
         os.path.join(scene.model_path, "closed", "visual_hull_mesh.ply"),
         os.path.join(scene.model_path, "closed", "visual_hull_samples.ply"),
-        dataset.visual_hull_level
+        dataset.visual_hull_level,
+        dataset.isolevel,
+        smooth_masks=not dataset.exact_masks,
     )
 
     # Last, initialize Gaussians
@@ -723,7 +725,10 @@ if __name__ == "__main__":
     # Initialize system state (RNG)
     safe_state(args.quiet)
 
-    print(f"invert_mask=\"{args.invert_mask}\", dilate_mask=\"{args.dilate_mask}\", dilation_radius=\"{args.dilation_radius}\"")
+    print(
+        f"exact_masks=\"{args.exact_masks}\", invert_mask=\"{args.invert_mask}\", "
+        f"dilate_mask=\"{args.dilate_mask}\", dilation_radius=\"{args.dilation_radius}\""
+    )
 
     # Start GUI server, configure and run training
     network_gui.init(args.ip, args.port)

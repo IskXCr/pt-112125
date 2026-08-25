@@ -19,7 +19,6 @@ from scene.colmap_loader import read_extrinsics_text, read_intrinsics_text, qvec
 from utils.graphics_utils import getWorld2View2, focal2fov, fov2focal
 import numpy as np
 import json
-from pathlib import Path
 from utils.init_utils import fetchPly, storePly
 from utils.sh_utils import SH2RGB
 from utils.point_utils import spherical_fibonacci
@@ -175,14 +174,43 @@ def readColmapSceneInfo(path, images, eval, llffhold=8):
 def readCamerasFromTransforms(path, transformsfile, white_background, extension=".png"):
     cam_infos = []
 
+    def resolve_frame_paths(frame_path):
+        normalized = frame_path.replace("\\", "/")
+        candidates = [os.path.join(path, normalized)]
+        if os.path.splitext(normalized)[1] == "":
+            candidates.append(os.path.join(path, normalized + extension))
+
+        basename = os.path.basename(normalized)
+        stem, suffix = os.path.splitext(basename)
+        if suffix == "":
+            basename += extension
+            stem = os.path.splitext(basename)[0]
+        candidates.append(os.path.join(path, "train", basename))
+
+        image_path = next(
+            (candidate for candidate in candidates if os.path.exists(candidate)),
+            candidates[0],
+        )
+        image_stem = os.path.splitext(os.path.basename(image_path))[0]
+        mask_candidates = [
+            os.path.join(path, "masks", image_stem + ".png"),
+            os.path.join(os.path.dirname(image_path), image_stem + "_mask.png"),
+            os.path.join(path, "train", stem + "_mask.png"),
+            os.path.join(path, normalized + "_mask.png"),
+        ]
+        mask_path = next(
+            (candidate for candidate in mask_candidates if os.path.exists(candidate)),
+            mask_candidates[0],
+        )
+        return image_path, mask_path, image_stem
+
     with open(os.path.join(path, transformsfile)) as json_file:
         contents = json.load(json_file)
         fovx = contents["camera_angle_x"]
 
         frames = contents["frames"]
         for idx, frame in enumerate(frames):
-            cam_name = os.path.join(path, frame["file_path"] + extension)
-            mask_path = os.path.join(path, frame["file_path"] + "_mask" + ".png")
+            image_path, mask_path, image_name = resolve_frame_paths(frame["file_path"])
 
             # NeRF 'transform_matrix' is a camera-to-world transform
             c2w = np.array(frame["transform_matrix"])
@@ -194,8 +222,6 @@ def readCamerasFromTransforms(path, transformsfile, white_background, extension=
             R = np.transpose(w2c[:3,:3])  # R is stored transposed due to 'glm' in CUDA code
             T = w2c[:3, 3]
 
-            image_path = os.path.join(path, cam_name)
-            image_name = Path(cam_name).stem
             image = Image.open(image_path)
 
             im_data = np.array(image.convert("RGBA"))

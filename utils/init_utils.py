@@ -341,13 +341,18 @@ class BoundedVisullHullExtractor:
         save_mesh_path: str,
         save_sample_path: str,
         level: int = 11,
-        isolevel: float = 0.5
+        isolevel: float = 0.5,
+        smooth_masks: bool = True,
     ):
         print("[BoundedVisullHullExtractor] Running extraction...")
         masks, transforms = extract_vh_args_from_cameras(cameras)
 
-        print("[BoundedVisullHullExtractor] Smoothing masks")
-        masks = (apply_gaussian_blur(masks) > 0.5).to(dtype=torch.float32)
+        if smooth_masks:
+            print("[BoundedVisullHullExtractor] Smoothing masks")
+            masks = (apply_gaussian_blur(masks) > 0.5).to(dtype=torch.float32)
+        else:
+            print("[BoundedVisullHullExtractor] Using exact masks")
+            masks = (masks > 0.5).to(dtype=torch.float32)
         print(f"[BoundedVisullHullExtractor] #Non-Binary-Elements: {((masks > 0) & (masks < 1.0)).sum()}")
 
         print("[BoundedVisullHullExtractor] Estimating bounding sphere")

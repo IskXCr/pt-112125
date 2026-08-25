@@ -13,7 +13,6 @@ import os
 import random
 import json
 import numpy as np
-from pathlib import Path
 from utils.system_utils import searchForMaxIteration
 from scene.dataset_readers import sceneLoadTypeCallbacks
 from scene.gaussian_model import BasicPointCloud, GaussianModel
@@ -94,13 +93,16 @@ class Scene:
         
         if not skip_visual_hull:
             print("[ DEBUG ] Force computing initialization via visual hull...")
+            closed_dir = os.path.join(self.model_path, "closed")
+            os.makedirs(closed_dir, exist_ok=True)
             scene_info.point_cloud = BoundedVisullHullExtractor.reconstruct(
                 self.getTrainCameras().copy(),
                 args.init_n_points,
-                os.path.join(Path(scene_info.ply_path).parent, "visual_hull_mesh.ply"),
-                scene_info.ply_path,
+                os.path.join(closed_dir, "visual_hull_mesh.ply"),
+                os.path.join(closed_dir, "visual_hull_samples.ply"),
                 args.visual_hull_level,
-                args.isolevel
+                args.isolevel,
+                smooth_masks=not args.exact_masks,
             )
         
         assert scene_info.point_cloud is not None

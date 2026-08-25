@@ -53,13 +53,17 @@ def loadCam(args, id, cam_info, resolution_scale):
         if mask_np is None:
             raise FileNotFoundError(f"Failed to read mask image at: {cam_info.mask_path}")
 
+        # Exact-mask mode uses the input silhouette after binary thresholding,
+        # with nearest-neighbor resizing and no boundary expansion.
+        mask_np = ((mask_np > 127).astype(np.uint8)) * 255
+
         # Keep mask aligned with the (potentially) resized RGB image.
         # Note: cv2.resize expects (width, height).
         if mask_np.shape[1] != resolution[0] or mask_np.shape[0] != resolution[1]:
             mask_np = cv2.resize(mask_np, dsize=resolution, interpolation=cv2.INTER_NEAREST)
 
         # CPU dilation with OpenCV (fast, avoids CUDA OOM)
-        if args.dilate_mask and int(args.dilation_radius) > 0:
+        if not args.exact_masks and args.dilate_mask and int(args.dilation_radius) > 0:
             r = int(args.dilation_radius)
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))
             mask_np = cv2.dilate(mask_np, kernel, iterations=1)
